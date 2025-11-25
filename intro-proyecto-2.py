@@ -10,16 +10,35 @@ alto_mapa = 20
 tamanio_celda = 30
 fps = 60
 
-# Colores
-negro = (0, 0, 0)
-blanco = (255, 255, 255)
-gris_oscuro = (50, 50, 50)
-verde_liana = (34, 139, 34)
-azul_tunel = (100, 149, 237)
-rojo = (255, 0, 0)
-verde_jugador = (0, 255, 0)
-amarillo = (255, 255, 0)
-naranja = (255, 165, 0)
+#fuentes
+fuente1 = pygame.font.Font(None,48)
+fuente_boton = pygame.font.Font(None,40) #TODO: buscar fuentes bonitas ＞︿＜
+
+# Colores (mari los cambie a hex por el cuadrito que sale, yo creo que es mas facil manejar los colores asi :-])
+negro          = "#000000"
+blanco         = "#FFFFFF"
+gris_oscuro    = "#323232"
+verde_liana    = "#228B22"
+verde          = "#3B5431"
+azul_tunel     = "#6495ED"
+azul_oscuro    = "#251870"
+rojo           = "#FF0000"
+verde_jugador  = "#00FF00"
+amarillo       = "#FFFF00"
+naranja        = "#FFA500"
+
+# INTERFAZ
+pantalla = pygame.display.set_mode((ancho_ventana, alto_ventana))
+pygame.display.set_caption("Proyecto de intro de Mari y Junn (❁´◡`❁)")
+
+#IMAGENES
+logo = pygame.image.load("oneway.png")
+logo_grande = pygame.transform.scale(logo, (400, 230))
+logo_rect = logo_grande.get_rect(center=(ancho_ventana/2, (alto_ventana/2)-200))
+
+#SONIDO
+sonido_click = pygame.mixer.Sound("pop.wav")
+sonido_click.set_volume(0.6)
 
 # Tipos de terreno
 camino = 0
@@ -49,11 +68,11 @@ class Casilla:
         pygame.draw.rect(pantalla, self.color, 
                         (self.x * tamanio_celda + offset_x, 
                          self.y * tamanio_celda + offset_y, 
-                         tamanio_celda, tamanio_celda))
+                            tamanio_celda, tamanio_celda))
         pygame.draw.rect(pantalla, negro, 
                         (self.x * tamanio_celda + offset_x, 
                          self.y * tamanio_celda + offset_y, 
-                         tamanio_celda, tamanio_celda), 1)
+                            tamanio_celda, tamanio_celda), 1) #a usted no le molesta que salga roja la identacion? a mi si jajsj
 
 class Camino(Casilla):
     def __init__(self, x, y):
@@ -123,7 +142,7 @@ class Salida(Casilla):
         return True
     
     def dibujar(self, pantalla, offset_x, offset_y):
-        # dibuja la casilla y coloca la letra 'E' al centro para marcar la salida
+        # dibuja la casilla y coloca la letra 'E' al centro para marcar la salida  #pq "E"? de "escape"?
         Casilla.dibujar(self, pantalla, offset_x, offset_y)
         centro_x = self.x * tamanio_celda + tamanio_celda // 2 + offset_x
         centro_y = self.y * tamanio_celda + tamanio_celda // 2 + offset_y
@@ -143,5 +162,75 @@ class Trampa:
         pygame.draw.circle(pantalla, naranja, 
                           (int(self.x * tamanio_celda + tamanio_celda/2 + offset_x),
                            int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)),
-                          int(tamanio_celda/3))
+                            int(tamanio_celda/3))
+        
+class Boton: #yo no voy a estar haciendo los botones uno por uno ~_~
+    def __init__(self, x, y, ancho, alto, texto, color, color_hover):
+        self.rect = pygame.Rect(x, y, ancho, alto)
+        self.texto = texto
+        self.color = color
+        self.color_hover = color_hover
 
+    def draw(self, pantalla, fuente):
+        mouse_pos = pygame.mouse.get_pos()
+
+        if self.rect.collidepoint(mouse_pos):
+            pygame.draw.rect(pantalla, self.color_hover, self.rect, border_radius=12)
+        else:
+            pygame.draw.rect(pantalla, self.color, self.rect, border_radius=12)
+
+        txt = fuente.render(self.texto, True, negro)
+        txt_rect = txt.get_rect(center=self.rect.center)
+        pantalla.blit(txt, txt_rect)
+
+    def clicked(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                return True
+        return 
+
+#BOTONES EN PANTALLA PRINCIPAL (TODO: ver donde los puedo acomodar mas bonito)
+boton_jugar = Boton(ancho_ventana/2 - 150, alto_ventana/2 + 0,
+                    300, 70, "JUGAR",
+                    "#3FD98E", "#2FB975")
+
+boton_opciones = Boton(ancho_ventana/2 - 150, alto_ventana/2 + 90,
+                    300, 70, "OPCIONES",
+                    "#6A7DFF", "#5665D6")
+
+boton_salir = Boton(ancho_ventana/2 - 150, alto_ventana/2 + 180,
+                    300, 70, "SALIR",
+                    "#FF5E6C", "#D94A56")
+
+#BUCLE PRINCIPAL!!
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            running = False
+
+        if boton_jugar.clicked(event):
+            sonido_click.play()
+            print("FUNCIONA EL BOTON DE JUGAR!!!")
+
+        if boton_opciones.clicked(event):
+            sonido_click.play()
+            print("FUNCIONA EL BOTON DE OPCIONES!")
+
+        if boton_salir.clicked(event):
+            sonido_click.play()
+            running = False
+
+    pantalla.fill("#12382C") #TODO: quiza lo cambie esto por una imagen, no me convence la vdd :<
+    pantalla.blit(logo_grande, logo_rect)
+
+    boton_jugar.draw(pantalla, fuente_boton)
+    boton_opciones.draw(pantalla, fuente_boton)
+    boton_salir.draw(pantalla, fuente_boton)
+
+    pygame.display.flip()
+
+pygame.quit()
