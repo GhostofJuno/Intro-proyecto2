@@ -1,20 +1,22 @@
 import pygame
+import random
 
 pygame.init()
 
 # Constantes
+fondo_menu = "#12382C"
 ancho_ventana = 1000
 alto_ventana = 700
 ancho_mapa = 25
 alto_mapa = 20
 tamanio_celda = 30
 fps = 60
+fuente1 = pygame.font.SysFont("Arial", 48)
+fuente_boton = pygame.font.SysFont("Arial", 40)
+fuente_pequeña = pygame.font.SysFont("Arial", 24)
+fuente_input = pygame.font.SysFont("Arial", 32)
 
-#fuentes
-fuente1 = pygame.font.Font(None,48)
-fuente_boton = pygame.font.Font(None,40) #TODO: buscar fuentes bonitas ＞︿＜
-
-# Colores (mari los cambie a hex por el cuadrito que sale, yo creo que es mas facil manejar los colores asi :-])
+# Colores
 negro          = "#000000"
 blanco         = "#FFFFFF"
 gris_oscuro    = "#323232"
@@ -26,19 +28,6 @@ rojo           = "#FF0000"
 verde_jugador  = "#00FF00"
 amarillo       = "#FFFF00"
 naranja        = "#FFA500"
-
-# INTERFAZ
-pantalla = pygame.display.set_mode((ancho_ventana, alto_ventana))
-pygame.display.set_caption("Proyecto de intro de Mari y Junn (❁´◡`❁)")
-
-#IMAGENES
-logo = pygame.image.load("oneway.png")
-logo_grande = pygame.transform.scale(logo, (400, 230))
-logo_rect = logo_grande.get_rect(center=(ancho_ventana/2, (alto_ventana/2)-200))
-
-#SONIDO
-sonido_click = pygame.mixer.Sound("pop.wav")
-sonido_click.set_volume(0.6)
 
 # Tipos de terreno
 camino = 0
@@ -74,6 +63,7 @@ class Casilla:
                          self.y * tamanio_celda + offset_y, 
                             tamanio_celda, tamanio_celda), 1) #a usted no le molesta que salga roja la identacion? a mi si jajsj
 
+
 class Camino(Casilla):
     def __init__(self, x, y):
         # camino libre para jugador y enemigos
@@ -85,6 +75,7 @@ class Camino(Casilla):
     
     def puede_pasar_enemigo(self):
         return True
+
 
 class Muro(Casilla):
     def __init__(self, x, y):
@@ -151,6 +142,7 @@ class Salida(Casilla):
         rect = texto.get_rect(center=(centro_x, centro_y))
         pantalla.blit(texto, rect)
 
+
 class Trampa:
     def __init__(self, x, y):
         # trampa funciona como objeto independiente con posición fija
@@ -163,7 +155,7 @@ class Trampa:
                           (int(self.x * tamanio_celda + tamanio_celda/2 + offset_x),
                            int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)),
                             int(tamanio_celda/3))
-        
+
 class Boton: #yo no voy a estar haciendo los botones uno por uno ~_~
     def __init__(self, x, y, ancho, alto, texto, color, color_hover):
         self.rect = pygame.Rect(x, y, ancho, alto)
@@ -188,6 +180,7 @@ class Boton: #yo no voy a estar haciendo los botones uno por uno ~_~
             if self.rect.collidepoint(event.pos):
                 return True
         return 
+
 
 class Jugador:
     def __init__(self, x, y):
@@ -243,73 +236,207 @@ class Jugador:
                           (int(self.x * tamanio_celda + tamanio_celda/2 + offset_x), #x del circulo
                            int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)), #y del circulo
                             int(tamanio_celda/2.5)) #radio
-
 class Enemigo:
+
     def __init__(self, x, y):
+        # posición como float para permitir movimiento suave
         self.x = float(x)
         self.y = float(y)
-        self.velocidad = 0.04
-        self.path = []
+
+        # velocidad base del enemigo
+        self.velocidad = 0.05
+
+        # dirección inicial elegida al azar
+        self.dir_x, self.dir_y = random.choice(
+            [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        )
+
+        # probabilidad de moverse aleatoriamente para evitar rutas predecibles
+        self.prob_random = 0.1 
+
+        # control de cada cuántos frames puede cambiar dirección
+        self.frames_desde_cambio = 0
+        self.cambio_cada = random.randint(10, 30)
+
+        # estado de muerte y respawn
         self.muerto = False
         self.tiempo_muerte = 0
         self.tiempo_respawn = 10
 
-#TODO: movimiento de los enemigos, intentar que sigan al jugador/ que busquen la salida
-    def dibujar(self, pantalla, offset_x, offset_y):
-        if not self.muerto:
-            pygame.draw.circle(pantalla, rojo, 
-                              (int(self.x * tamanio_celda + tamanio_celda/2 + offset_x),
-                               int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)),
-                              int(tamanio_celda/2.5))
+    def _puede_moverse_a_pos(self, nx, ny, mapa, modo_juego):
+        # si sale del mapa, movimiento bloqueado
+        if not (0 <= int(nx) < ancho_mapa and 0 <= int(ny) < alto_mapa):
+            return False
+            
+        casilla = mapa[int(ny)][int(nx)]
+        
+        # muros siempre bloquean
+        if casilla.tipo == muro:
+            return False
+
+        # túneles solo permitidos si el enemigo es "escaper"
+        if casilla.tipo == tunel and modo_juego == 1:
+            return False
+        
+        # lianas solo permitidas si el enemigo es "cazador"
+        if casilla.tipo == liana and modo_juego == 2:
+            return False
+            
+        return True
+
+    def _direcciones_validas(self, mapa, modo_juego):
+        # devuelve una lista de direcciones posibles según el tipo de casilla
+        dirs = []
+        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            nx_celda = int(self.x + dx)
+            ny_celda = int(self.y + dy)
+            
+            # fuera del mapa se ignora
+            if not (0 <= nx_celda < ancho_mapa and 0 <= ny_celda < alto_mapa):
+                continue
+
+            casilla = mapa[ny_celda][nx_celda]
+                
+            # misma lógica de bloqueo usada en el movimiento
+            if casilla.tipo == muro:
+                continue            
+            if casilla.tipo == tunel and modo_juego == 1:
+                continue           
+            if casilla.tipo == liana and modo_juego == 2:
+                continue
+
+            dirs.append((dx, dy))
+
+        return dirs
+
+    def _escoger_direccion_hacia(self, objetivo_x, objetivo_y, mapa, modo_juego, amenaza_x=None, amenaza_y=None):
+        # obtiene direcciones que cumplen reglas del mapa y del rol
+        dirs_validas = self._direcciones_validas(mapa, modo_juego) 
+        if not dirs_validas:
+            return
+
+        # ocasionalmente se mueve al azar para crear comportamiento menos predecible
+        if random.random() < self.prob_random:
+            self.dir_x, self.dir_y = random.choice(dirs_validas)
+            return
+
+        # modo 1: el enemigo es cazador y persigue al jugador
+        if modo_juego == 1: 
+            # calcula la distancia al jugador para decidir la dirección
+            vx = objetivo_x - self.x
+            vy = objetivo_y - self.y
+
+            # intenta priorizar el eje con mayor diferencia
+            mover_horizontal = abs(vx) > abs(vy)
+            preferidas = []
+
+            # crea una lista ordenada de direcciones preferidas
+            if mover_horizontal:
+                preferidas.append((1, 0) if vx > 0 else (-1, 0))
+                preferidas.append((0, 1) if vy > 0 else (0, -1))
+            else:
+                preferidas.append((0, 1) if vy > 0 else (0, -1))
+                preferidas.append((1, 0) if vx > 0 else (-1, 0))
+
+            # si una preferida es válida, la usa
+            for d in preferidas:
+                if d in dirs_validas:
+                    self.dir_x, self.dir_y = d
+                    return
+            
+            # si no, elige cualquiera válida para evitar quedarse trabado
+            self.dir_x, self.dir_y = random.choice(dirs_validas)
+
+        # modo 2: el enemigo es presa, huye del jugador y busca la salida
+        elif modo_juego == 2: 
+            best_score = -float('inf')
+            best_dir = None
+            
+            # si no se pasó amenaza explícita, usa el jugador como amenaza
+            if amenaza_x is None: 
+                amenaza_x, amenaza_y = self.x, self.y
+
+            # revisa cada dirección posible
+            for dx, dy in dirs_validas:
+                nx = self.x + dx
+                ny = self.y + dy
+                
+                # heurística: prefiere alejarse de la amenaza y acercarse a la salida
+                dist_a_objetivo = ((nx - objetivo_x)**2 + (ny - objetivo_y)**2)**0.5
+                dist_a_amenaza = ((nx - amenaza_x)**2 + (ny - amenaza_y)**2)**0.5
+                
+                # peso mayor en huir para dar efecto "presa"
+                score = dist_a_amenaza * 2.5 - dist_a_objetivo 
+
+                if score > best_score:
+                    best_score = score
+                    best_dir = (dx, dy)
+            
+            # si encontró una dirección buena, la usa
+            if best_dir:
+                self.dir_x, self.dir_y = best_dir
+            else:
+                # si no, toma cualquier válida
+                self.dir_x, self.dir_y = random.choice(dirs_validas)
     
+    def mover_hacia(self, objetivo_x, objetivo_y, mapa, perseguir=True, modo_juego=1):
+        # si está muerto, no se mueve
+        if self.muerto:
+            return
+
+        amenaza_x, amenaza_y = None, None
+        
+        # modo 2: se convierte en presa y debe escapar hacia la salida
+        if not perseguir and modo_juego == 2:
+            # jugador es la amenaza
+            amenaza_x, amenaza_y = objetivo_x, objetivo_y
+            # salida siempre en la esquina final
+            salida_x = ancho_mapa - 2
+            salida_y = alto_mapa - 2
+            # el objetivo del movimiento ahora es la salida
+            objetivo_x, objetivo_y = salida_x + 0.5, salida_y + 0.5
+        
+        # controla cada cuántos frames reconsidera su dirección
+        self.frames_desde_cambio += 1
+
+        if self.frames_desde_cambio >= self.cambio_cada:
+            self.frames_desde_cambio = 0
+            self._escoger_direccion_hacia(objetivo_x, objetivo_y, mapa, modo_juego, amenaza_x, amenaza_y)
+
+        # calcula la posición tentativa
+        nx = self.x + self.dir_x * self.velocidad
+        ny = self.y + self.dir_y * self.velocidad
+
+        # se valida el movimiento considerando reglas del rol
+        if self._puede_moverse_a_pos(nx, ny, mapa, modo_juego):
+            self.x = nx
+            self.y = ny
+        else:
+            # si choca, intenta cambiar a una dirección que sí pueda tomar
+            dirs_validas = self._direcciones_validas(mapa, modo_juego)
+            if dirs_validas:
+                self.dir_x, self.dir_y = random.choice(dirs_validas)
+            else:
+                # si no hay salida posible, se queda quieto
+                self.dir_x, self.dir_y = 0, 0
+
+    def dibujar(self, pantalla, offset_x, offset_y):
+        # dibuja el enemigo solo si no está muerto
+        pygame.draw.circle(
+            pantalla,
+            rojo,
+            (
+                int(self.x * tamanio_celda + tamanio_celda / 2 + offset_x),
+                int(self.y * tamanio_celda + tamanio_celda / 2 + offset_y),
+            ),
+            int(tamanio_celda / 2.5),
+        )
+
     def actualizar(self, tiempo_actual):
+        # revisa si ya pasó suficiente tiempo para revivir
         if self.muerto and tiempo_actual - self.tiempo_muerte >= self.tiempo_respawn:
             self.muerto = False
             return True
         return False
 
-#BOTONES EN PANTALLA PRINCIPAL (TODO: ver donde los puedo acomodar mas bonito)
-boton_jugar = Boton(ancho_ventana/2 - 150, alto_ventana/2 + 0,
-                    300, 70, "JUGAR",
-                    "#3FD98E", "#2FB975")
-
-boton_puntaje = Boton(ancho_ventana/2 - 150, alto_ventana/2 + 90,
-                    300, 70, "OPCIONES",
-                    "#6A7DFF", "#5665D6")
-
-boton_salir = Boton(ancho_ventana/2 - 150, alto_ventana/2 + 180,
-                    300, 70, "SALIR",
-                    "#FF5E6C", "#D94A56")
-
-#BUCLE PRINCIPAL!!
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            running = False
-
-        if boton_jugar.clicked(event):
-            sonido_click.play()
-            print("FUNCIONA EL BOTON DE JUGAR!!!")
-
-        if boton_puntaje.clicked(event):
-            sonido_click.play()
-            print("FUNCIONA EL BOTON DE puntaje!")
-
-        if boton_salir.clicked(event):
-            sonido_click.play()
-            running = False
-
-    pantalla.fill("#12382C") #TODO: quiza lo cambie esto por una imagen, no me convence la vdd :<
-    pantalla.blit(logo_grande, logo_rect)
-
-    boton_jugar.draw(pantalla, fuente_boton)
-    boton_puntaje.draw(pantalla, fuente_boton)
-    boton_salir.draw(pantalla, fuente_boton)
-
-    pygame.display.flip()
-
-pygame.quit()
+# JUNOO, lo que hce fue compltar más y acomodarlo, las funciones de la interfaz las ponemos luego para mantener el ordeen ✌️✌️
