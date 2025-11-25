@@ -189,12 +189,91 @@ class Boton: #yo no voy a estar haciendo los botones uno por uno ~_~
                 return True
         return 
 
+class Jugador:
+    def __init__(self, x, y):
+        self.x = float(x)
+        self.y = float(y)
+        self.velocidad_normal = 0.15
+        self.velocidad_correr = 0.25
+        self.energia = 100
+        self.energia_max = 100
+        self.recuperacion_energia = 0.5
+        self.consumo_energia = 0.8
+        self.corriendo = False
+        
+    def mover(self, dx, dy, mapa):
+        nueva_x = self.x + dx
+        nueva_y = self.y + dy
+        
+        #revisamos que no choque con pared
+        if nueva_x < 0 or nueva_x >= ancho_mapa or nueva_y < 0 or nueva_y >= alto_mapa:
+            return False
+        
+        margen = 0.3
+        esquinas = [
+            (nueva_x - margen, nueva_y - margen),
+            (nueva_x + margen, nueva_y - margen),
+            (nueva_x - margen, nueva_y + margen),
+            (nueva_x + margen, nueva_y + margen)
+        ]
+        
+        for ex, ey in esquinas: #revisa las esquinas alrededor del jugador para evitar que se meta
+            if ex < 0 or ex >= ancho_mapa or ey < 0 or ey >= alto_mapa:
+                return False
+            if not mapa[int(ey)][int(ex)].puede_pasar_jugador(): #revisa tipo de casilla
+                return False
+        
+        self.x = nueva_x
+        self.y = nueva_y
+        return True
+    
+    def actualizar_energia(self):
+        if self.corriendo and self.energia > 0:
+            self.energia -= self.consumo_energia
+            if self.energia <= 0:
+                self.energia = 0
+                self.corriendo = False
+        elif not self.corriendo:
+            self.energia += self.recuperacion_energia
+            if self.energia > self.energia_max:
+                self.energia = self.energia_max
+    
+    def dibujar(self, pantalla, offset_x, offset_y):#TODO: lo podemos cambiar luego, si quieras un bichito o lo dejamos como bolita, cuando lo corramos vemos :3
+        pygame.draw.circle(pantalla, verde_jugador,  
+                          (int(self.x * tamanio_celda + tamanio_celda/2 + offset_x), #x del circulo
+                           int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)), #y del circulo
+                            int(tamanio_celda/2.5)) #radio
+
+class Enemigo:
+    def __init__(self, x, y):
+        self.x = float(x)
+        self.y = float(y)
+        self.velocidad = 0.04
+        self.path = []
+        self.muerto = False
+        self.tiempo_muerte = 0
+        self.tiempo_respawn = 10
+
+#TODO: movimiento de los enemigos, intentar que sigan al jugador/ que busquen la salida
+    def dibujar(self, pantalla, offset_x, offset_y):
+        if not self.muerto:
+            pygame.draw.circle(pantalla, rojo, 
+                              (int(self.x * tamanio_celda + tamanio_celda/2 + offset_x),
+                               int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)),
+                              int(tamanio_celda/2.5))
+    
+    def actualizar(self, tiempo_actual):
+        if self.muerto and tiempo_actual - self.tiempo_muerte >= self.tiempo_respawn:
+            self.muerto = False
+            return True
+        return False
+
 #BOTONES EN PANTALLA PRINCIPAL (TODO: ver donde los puedo acomodar mas bonito)
 boton_jugar = Boton(ancho_ventana/2 - 150, alto_ventana/2 + 0,
                     300, 70, "JUGAR",
                     "#3FD98E", "#2FB975")
 
-boton_opciones = Boton(ancho_ventana/2 - 150, alto_ventana/2 + 90,
+boton_puntaje = Boton(ancho_ventana/2 - 150, alto_ventana/2 + 90,
                     300, 70, "OPCIONES",
                     "#6A7DFF", "#5665D6")
 
@@ -216,9 +295,9 @@ while running:
             sonido_click.play()
             print("FUNCIONA EL BOTON DE JUGAR!!!")
 
-        if boton_opciones.clicked(event):
+        if boton_puntaje.clicked(event):
             sonido_click.play()
-            print("FUNCIONA EL BOTON DE OPCIONES!")
+            print("FUNCIONA EL BOTON DE puntaje!")
 
         if boton_salir.clicked(event):
             sonido_click.play()
@@ -228,7 +307,7 @@ while running:
     pantalla.blit(logo_grande, logo_rect)
 
     boton_jugar.draw(pantalla, fuente_boton)
-    boton_opciones.draw(pantalla, fuente_boton)
+    boton_puntaje.draw(pantalla, fuente_boton)
     boton_salir.draw(pantalla, fuente_boton)
 
     pygame.display.flip()
