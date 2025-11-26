@@ -439,4 +439,127 @@ class Enemigo:
             return True
         return False
 
-# JUNOO, lo que hce fue compltar más y acomodarlo, las funciones de la interfaz las ponemos luego para mantener el ordeen ✌️✌️
+# JUNOO, lo que hce fue compltar más y acomodarlo, las funciones de la interfaz las ponemos luego para mantener el ordeen ✌️✌️  #okss
+
+class Mapa:
+    def __init__(self, ancho, alto):
+        # se guarda el tamaño y se genera el mapa inicial
+        self.ancho = ancho
+        self.alto = alto
+        self.matriz = []
+        self.generar_mapa()
+
+    def generar_mapa(self,):
+        """genera el laberinto mezclando exploración, iteración y ajustes aleatorios"""
+
+        # se inicia toda la matriz llena de muros
+        self.matriz = [[Muro(x, y) for x in range(self.ancho)] for y in range(self.alto)]
+
+        # Inicializa la pila de celdas a visitar
+        pila = [(1, 1)] 
+        self.matriz[1][1] = Camino(1, 1) # Marca el inicio como camino
+        
+        # Direcciones de movimiento (pasos de 2)
+        direcciones = [(-2, 0), (0, 2), (2, 0), (0, -2)]
+
+        while pila:
+            # 1. Toma la celda actual de la cima de la pila
+            y, x = pila[-1] 
+            
+            # 2. Encuentra vecinos no visitados
+            vecinos_validos = []
+            random.shuffle(direcciones) # Orden aleatorio para evitar patrones
+            
+            for dy, dx in direcciones:
+                ny, nx = y + dy, x + dx
+                
+                # Revisa los límites
+                if 1 <= ny < self.alto - 1 and 1 <= nx < self.ancho - 1:
+                    # Revisa si la celda vecina es un Muro (no visitada)
+                    if self.matriz[ny][nx].tipo == muro:
+                        vecinos_validos.append((ny, nx, y + dy // 2, x + dx // 2))
+
+            # 3. Si hay vecinos no visitados, avanza
+            if vecinos_validos:
+                # Elige el primer vecino (ya están en orden aleatorio)
+                ny, nx, pared_y, pared_x = vecinos_validos[0] 
+                
+                # Abre la pared intermedia
+                self.matriz[pared_y][pared_x] = Camino(pared_x, pared_y)
+                
+                # Convierte la nueva celda en camino y la añade a la pila
+                self.matriz[ny][nx] = Camino(nx, ny)
+                pila.append((ny, nx))
+            else:
+                # 4. Si no hay vecinos, hace vuelve a la celda anterior
+                pila.pop() 
+
+        # intenta asegurar que haya al menos un camino hacia la salida
+        for i in range(1, self.alto - 1):
+            if self.matriz[i][self.ancho - 3].tipo == camino:
+                self.matriz[i][self.ancho - 2] = Camino(self.ancho - 2, i)
+
+        for i in range(1, self.ancho - 1):
+            if self.matriz[self.alto - 3][i].tipo == camino:
+                self.matriz[self.alto - 2][i] = Camino(i, self.alto - 2)
+
+        # añade conexiones adicionales en zonas aleatorias
+        # esto evita que el laberinto sea demasiado cerrado o lineal
+        for intento in range(40):
+            y = random.randint(2, self.alto - 3)
+            x = random.randint(2, self.ancho - 3)
+
+            if self.matriz[y][x].tipo == muro:
+                vecinos_camino = 0
+
+                # cuenta cuántos caminos hay alrededor
+                for dy, dx in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < self.alto and 0 <= nx < self.ancho:
+                        if self.matriz[ny][nx].tipo == camino:
+                            vecinos_camino += 1
+
+                # si hay pasillos a ambos lados, abre un punto extra
+                if vecinos_camino == 2:
+                    self.matriz[y][x] = Camino(x, y)
+
+        # coloca túneles para el jugador en posiciones válidas
+        tuneles_creados = 0
+        for y in range(2, self.alto - 2):
+            for x in range(2, self.ancho - 2):
+                if tuneles_creados < 4 and self.matriz[y][x].tipo == camino:
+                    if random.random() < 0.015:
+                        # evita esquinas para no romper el inicio ni la salida
+                        if not ((y < 4 and x < 4) or (y > self.alto - 5 and x > self.ancho - 5)):
+                            self.matriz[y][x] = Tunel(x, y)
+                            tuneles_creados += 1
+
+        # coloca lianas para los enemigos en muros que tengan un camino cerca
+        lianas_creadas = 0
+        for y in range(2, self.alto - 2):
+            for x in range(2, self.ancho - 2):
+                if lianas_creadas < 8 and self.matriz[y][x].tipo == muro:
+                    if random.random() < 0.02:
+                        tiene_vecino = False
+
+                        # revisa si hay un pasillo que permita usar esa liana
+                        for dy, dx in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                            ny, nx = y + dy, x + dx
+                            if 0 <= ny < self.alto and 0 <= nx < self.ancho:
+                                if self.matriz[ny][nx].tipo in (camino, liana):
+                                    tiene_vecino = True
+                                    break
+
+                        if tiene_vecino:
+                            self.matriz[y][x] = Liana(x, y)
+                            lianas_creadas += 1
+
+        # marca la salida en la esquina inferior derecha
+        self.matriz[self.alto - 2][self.ancho - 2] = Salida(self.ancho - 2, self.alto - 2)
+
+    def dibujar(self, pantalla, offset_x, offset_y):
+        # recorre toda la matriz y dibuja cada casilla según su tipo :3333
+        for fila in self.matriz:
+            for casilla in fila:
+                casilla.dibujar(pantalla, offset_x, offset_y)
+
