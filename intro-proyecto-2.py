@@ -759,6 +759,7 @@ class Juego:
         self.boton_jugar.draw(self.pantalla, fuente_boton)
         self.boton_puntajes.draw(self.pantalla, fuente_boton)
         self.boton_salir.draw(self.pantalla, fuente_boton)
-# faltan algunas cosillas que estoy terminando
+# perdón, se me había olvidado subirlo. Por si acaso, faltan algunas cosillas que estoy terminando :))
+
 
 
