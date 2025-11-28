@@ -1,10 +1,9 @@
-#mari a mi esto ya me corre al 100, confirmalo si puedes. No se te olvide descargarle las cosas que subi
-#voy a ver si puedo cambiarle cosas del funcionamiento luego, esa gente actua rarillo
+#marii porfa revisa que todo te corra bien, si encuentras algun error me avisas porfiss
 import pygame
 import random
 import json
 import time 
-from datetime import datetime #esto es para los puntajes tmb ya habia puesto el archivo :3
+from datetime import datetime
 
 pygame.init()
 pygame.mixer.init() #esto es para los rolones
@@ -18,24 +17,24 @@ alto_mapa = 20
 tamanio_celda = 30
 fps = 60
 
-# La inicialización de fuentes debe ir después de pygame.init()
+# fuentes!
 fuente1 = pygame.font.SysFont("Arial", 48)
 fuente_boton = pygame.font.SysFont("Arial", 40)
 fuente_pequeña = pygame.font.SysFont("Arial", 24)
 fuente_input = pygame.font.SysFont("Arial", 32)
 
-# Colores
-negro          = "#000000"
-blanco         = "#FFFFFF"
-gris_oscuro    = "#323232"
-verde_liana    = "#228B22"
-verde          = "#3B5431"
-azul_tunel     = "#6495ED"
-azul_oscuro    = "#251870"
-rojo           = "#FF0000"
-verde_jugador  = "#00FF00"
-amarillo       = "#FFFF00"
-naranja        = "#FFA500"
+# Colores #los cambie jsjsj
+negro          = "#0A0F0A"
+blanco         = "#EAEAEA"   
+gris_oscuro    = "#3B2F26"
+verde_liana    = "#7FFF00"    
+verde          = "#A8B57A"   
+azul_tunel     = "#483D8B"   
+azul_oscuro    = "#1A103D"   
+rojo           = "#732323"   
+verde_jugador  = "#FBC58D"   
+amarillo       = "#FFD966"   
+naranja        = "#C65A2E"
 
 # Tipos de terreno
 camino = 0
@@ -150,18 +149,19 @@ class Salida(Casilla):
         rect = texto.get_rect(center=(centro_x, centro_y))
         pantalla.blit(texto, rect)
 
-
 class Trampa:
     def __init__(self, x, y):
         # trampa funciona como objeto independiente con posición fija
+        # Nota: x e y son coordenadas de celda (enteras)
         self.x = x
         self.y = y
     
     def dibujar(self, pantalla, offset_x, offset_y):
         # círculo naranja que indica visualmente la trampa
+        centro_x = int(self.x * tamanio_celda + tamanio_celda/2 + offset_x)
+        centro_y = int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)
         pygame.draw.circle(pantalla, naranja, 
-                          (int(self.x * tamanio_celda + tamanio_celda/2 + offset_x),
-                           int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)),
+                            (centro_x, centro_y),
                             int(tamanio_celda/3))
 
 class Boton:
@@ -188,7 +188,6 @@ class Boton:
             if self.rect.collidepoint(event.pos):
                 return True
         return 
-
 
 class Jugador:
     def __init__(self, x, y):
@@ -227,18 +226,16 @@ class Jugador:
 
             # Revisa límites después de convertir a int
             if not (0 <= celda_y < alto_mapa and 0 <= celda_x < ancho_mapa):
-                 return False
+                return False
 
             casilla = mapa[celda_y][celda_x]
 
             if not casilla.puede_pasar_jugador(): #revisa tipo de casilla
                 return False
             
-            # Lógica especial de paso para el jugador (Modo Escapa 1)
-            # En modo Escapa, el jugador NO puede pasar por Lianas (actúan como Muro)
-            if modo_juego == 1 and casilla.tipo == liana:
+            # no puede pasar por las lianas nunca!
+            if casilla.tipo == liana: 
                 return False
-
         
         self.x = nueva_x
         self.y = nueva_y
@@ -256,212 +253,267 @@ class Jugador:
                 self.energia = self.energia_max
     
     def dibujar(self, pantalla, offset_x, offset_y):
+        # El cálculo asume que self.x y self.y son la posición del CENTRO de la entidad
+        centro_x = int(self.x * tamanio_celda + offset_x)
+        centro_y = int(self.y * tamanio_celda + offset_y)
+        
         pygame.draw.circle(pantalla, verde_jugador,  
-                          (int(self.x * tamanio_celda + tamanio_celda/2 + offset_x), #x del circulo
-                           int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)), #y del circulo
-                            int(tamanio_celda/2.5)) #radio
+                            (centro_x, centro_y), 
+                            int(tamanio_celda/2.5)) 
+
+#le cambie cosas a estos bichillos
 class Enemigo:
     def __init__(self, x, y):
-        # posición como float para permitir movimiento suave
         self.x = float(x)
         self.y = float(y)
 
-        # velocidad base del enemigo
+        # MOVIMIENTO BÁSICO
         self.velocidad = 0.05
+        self.dir_x, self.dir_y = random.choice([(1,0), (-1,0), (0,1), (0,-1)])
 
-        # dirección inicial elegida al azar
-        self.dir_x, self.dir_y = random.choice(
-            [(1, 0), (-1, 0), (0, 1), (0, -1)]
-        )
+        # PATRULLAR
+        self.patrulla_rango = 6   # tamaño del área de "patrulla"
+        self.patrulla_centro = (x, y)
+        self.estado = "patrulla"  # o "perseguir"
 
-        # probabilidad de moverse aleatoriamente para evitar rutas predecibles
-        self.prob_random = 0.1 
+        # DETECTAR JUGADOR
+        self.radio_vision = 7     # distancia para detectar al jugador
+        self.perder_vision = 10   # cuando se aleja demasiado
 
-        # control de cada cuántos frames puede cambiar dirección
+        # CONTROL
         self.frames_desde_cambio = 0
-        self.cambio_cada = random.randint(10, 30)
-
-        # estado de muerte y respawn
+        self.cambio_cada = random.randint(30, 90) # Aumento de tiempo para patrullaje
         self.muerto = False
-        self.tiempo_muerte = 0
-        self.tiempo_respawn = 10
 
-    def _puede_moverse_a_pos(self, nx, ny, mapa, modo_juego):
-        # si sale del mapa, movimiento bloqueado
-        if not (0 <= int(nx) < ancho_mapa and 0 <= int(ny) < alto_mapa):
-            return False
+    def puede_moverse(self, nx, ny, mapa, modo_juego):
+        margen = 0.35
+        for ex, ey in [
+            (nx, ny),
+            (nx-margen, ny-margen),
+            (nx+margen, ny-margen),
+            (nx-margen, ny+margen),
+            (nx+margen, ny+margen),
+        ]:
+            if ex < 0 or ex >= ancho_mapa or ey < 0 or ey >= alto_mapa:
+                return False
+            celda = mapa[int(ey)][int(ex)]
+            if celda.tipo == muro:
+                return False
             
-        casilla = mapa[int(ny)][int(nx)]
-        
-        # muros siempre bloquean
-        if casilla.tipo == muro:
-            return False
-
-        # túneles solo permitidos si el enemigo es "escaper"
-        if casilla.tipo == tunel and modo_juego == 1:
-            return False
-        
-        # lianas solo permitidas si el enemigo es "cazador"
-        if casilla.tipo == liana and modo_juego == 2:
-            return False
-            
+            if celda.tipo == tunel: 
+                return False
         return True
 
-    def _direcciones_validas(self, mapa, modo_juego):
-        # devuelve una lista de direcciones posibles según el tipo de casilla
-        dirs = []
-        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            nx_celda = int(self.x + dx)
-            ny_celda = int(self.y + dy)
-            
-            # fuera del mapa se ignora
-            if not (0 <= nx_celda < ancho_mapa and 0 <= ny_celda < alto_mapa):
-                continue
+    def distancia_jugador(self, jugador):
+        return ((self.x - jugador.x)**2 + (self.y - jugador.y)**2) ** 0.5
 
-            casilla = mapa[ny_celda][nx_celda]
-                
-            # misma lógica de bloqueo usada en el movimiento
-            if casilla.tipo == muro:
-                continue            
-            if casilla.tipo == tunel and modo_juego == 1:
-                continue           
-            if casilla.tipo == liana and modo_juego == 2:
-                continue
+    def esta_en_rango_patrulla(self):
+        cx, cy = self.patrulla_centro
+        return (
+            abs(self.x - cx) < self.patrulla_rango and 
+            abs(self.y - cy) < self.patrulla_rango
+        )
 
-            dirs.append((dx, dy))
-
-        return dirs
-
-    def _escoger_direccion_hacia(self, objetivo_x, objetivo_y, mapa, modo_juego, amenaza_x=None, amenaza_y=None):
-        # obtiene direcciones que cumplen reglas del mapa y del rol
-        dirs_validas = self._direcciones_validas(mapa, modo_juego) 
-        if not dirs_validas:
-            return
-
-        # ocasionalmente se mueve al azar para crear comportamiento menos predecible
-        if random.random() < self.prob_random:
-            self.dir_x, self.dir_y = random.choice(dirs_validas)
-            return
-
-        # modo 1: el enemigo es cazador y persigue al jugador
-        if modo_juego == 1: 
-            # calcula la distancia al jugador para decidir la dirección
-            vx = objetivo_x - self.x
-            vy = objetivo_y - self.y
-
-            # intenta priorizar el eje con mayor diferencia
-            mover_horizontal = abs(vx) > abs(vy)
-            preferidas = []
-
-            # crea una lista ordenada de direcciones preferidas
-            if mover_horizontal:
-                preferidas.append((1, 0) if vx > 0 else (-1, 0))
-                preferidas.append((0, 1) if vy > 0 else (0, -1))
-            else:
-                preferidas.append((0, 1) if vy > 0 else (0, -1))
-                preferidas.append((1, 0) if vx > 0 else (-1, 0))
-
-            # si una preferida es válida, la usa
-            for d in preferidas:
-                if d in dirs_validas:
-                    self.dir_x, self.dir_y = d
-                    return
-            
-            # si no, elige cualquiera válida para evitar quedarse trabado
-            self.dir_x, self.dir_y = random.choice(dirs_validas)
-
-        # modo 2: el enemigo es presa, huye del jugador y busca la salida
-        elif modo_juego == 2: 
-            best_score = -float('inf')
-            best_dir = None
-            
-            # si no se pasó amenaza explícita, usa el jugador como amenaza
-            if amenaza_x is None: 
-                amenaza_x, amenaza_y = self.x, self.y
-
-            # revisa cada dirección posible
-            for dx, dy in dirs_validas:
-                nx = self.x + dx
-                ny = self.y + dy
-                
-                # heurística: prefiere alejarse de la amenaza y acercarse a la salida
-                dist_a_objetivo = ((nx - objetivo_x)**2 + (ny - objetivo_y)**2)**0.5
-                dist_a_amenaza = ((nx - amenaza_x)**2 + (ny - amenaza_y)**2)**0.5
-                
-                # peso mayor en huir para dar efecto "presa"
-                score = dist_a_amenaza * 2.5 - dist_a_objetivo 
-
-                if score > best_score:
-                    best_score = score
-                    best_dir = (dx, dy)
-            
-            # si encontró una dirección buena, la usa
-            if best_dir:
-                self.dir_x, self.dir_y = best_dir
-            else:
-                # si no, toma cualquier válida
-                self.dir_x, self.dir_y = random.choice(dirs_validas)
-    
-    def mover_hacia(self, objetivo_x, objetivo_y, mapa, perseguir=True, modo_juego=1):
-        # si está muerto, no se mueve
+    def mover(self, jugador, mapa, modo_juego):
         if self.muerto:
             return
 
-        amenaza_x, amenaza_y = None, None
-        
-        # modo 2: se convierte en presa y debe escapar hacia la salida
-        if not perseguir and modo_juego == 2:
-            # jugador es la amenaza
-            amenaza_x, amenaza_y = objetivo_x, objetivo_y
-            # salida siempre en la esquina final
-            salida_x = ancho_mapa - 2
-            salida_y = alto_mapa - 2
-            # el objetivo del movimiento ahora es la salida
-            objetivo_x, objetivo_y = salida_x + 0.5, salida_y + 0.5
-        
-        # controla cada cuántos frames reconsidera su dirección
+        # CAMBIO DE ESTADO: DETECTAR JUGADOR
+        dist = self.distancia_jugador(jugador)
+
+        if self.estado == "patrulla":
+            if dist < self.radio_vision:
+                self.estado = "perseguir"
+        elif self.estado == "perseguir":
+            if dist > self.perder_vision:
+                self.estado = "patrulla"
+
+        #LÓGICA DE MOVIMIENTO SEGÚN ESTADO
+        if self.estado == "patrulla":
+            self.mover_patrullando(mapa, modo_juego)
+
+        elif self.estado == "perseguir":
+            # Diferencia: Modo 1 (Escapa) persigue, Modo 2 (Cazador) huye.
+            if modo_juego == 1:
+                self.mover_persiguiendo(jugador, mapa, modo_juego)
+            else:
+                self.mover_huyendo(jugador, mapa, modo_juego)
+
+    def mover_patrullando(self, mapa, modo_juego):
         self.frames_desde_cambio += 1
 
-        if self.frames_desde_cambio >= self.cambio_cada:
+        #FUERA DE RANGO: Si se aleja demasiado del centro de patrulla, gira
+        if not self.esta_en_rango_patrulla():
+            cx, cy = self.patrulla_centro
+            # Fuerza el giro hacia el centro
+            self.dir_x = 1 if cx > self.x else -1 if cx < self.x else 0
+            self.dir_y = 1 if cy > self.y else -1 if cy < self.y else 0
+            # Resetea el contador para que siga en esa dirección por un tiempo
             self.frames_desde_cambio = 0
-            self._escoger_direccion_hacia(objetivo_x, objetivo_y, mapa, modo_juego, amenaza_x, amenaza_y)
+            
+        #CAMBIO DE DIRECCIÓN POR TIEMPO: Si ha pasado el tiempo, elige una dirección nueva
+        elif self.frames_desde_cambio > self.cambio_cada:
+            # Nueva dirección aleatoria (incluyendo quedarse quieto (0,0))
+            self.dir_x, self.dir_y = random.choice([(1,0),(-1,0),(0,1),(0,-1), (0,0)])
+            self.frames_desde_cambio = 0
+            # Nuevo tiempo aleatorio para la siguiente patrulla (0.5 a 1.5 seg)
+            self.cambio_cada = random.randint(30, 90) 
 
-        # calcula la posición tentativa
+
+        #INTENTO DE MOVIMIENTO
         nx = self.x + self.dir_x * self.velocidad
         ny = self.y + self.dir_y * self.velocidad
 
-        # se valida el movimiento considerando reglas del rol
-        if self._puede_moverse_a_pos(nx, ny, mapa, modo_juego):
-            self.x = nx
-            self.y = ny
+        #COLISIÓN: Si choca con algo, cambia de dirección inmediatamente
+        if not self.puede_moverse(nx, ny, mapa, modo_juego):
+            # Elige una dirección nueva aleatoria y resetea el contador para que gire
+            self.dir_x, self.dir_y = random.choice([(1,0),(-1,0),(0,1),(0,-1)])
+            self.frames_desde_cambio = 0
+            return
+
+        #APLICAR MOVIMIENTO
+        self.x = nx
+        self.y = ny
+
+    def mover_persiguiendo(self, jugador, mapa, modo_juego):
+        # Lógica de Búsqueda Voraz Reactiva: Prioriza el movimiento que más acerca al jugador
+        v = self.velocidad # La velocidad actual del enemigo
+
+        #Lista de todos los movimientos posibles (4 direcciones)
+        movimientos = [
+            (v, 0), (-v, 0), (0, v), (0, -v)
+        ]
+
+        #Función de puntuación: Distancia al jugador después del movimiento
+        def score_move(move):
+            mx, my = move
+            nx = self.x + mx
+            ny = self.y + my
+            
+            #Distancia al cuadrado (se usa para ordenar, más rápido de calcular)
+            dist_sq = (jugador.x - nx)**2 + (jugador.y - ny)**2
+            # Queremos el score más PEQUEÑO (menor distancia al jugador = mejor)
+            return dist_sq
+
+        #Ordenar los movimientos: el que tenga la menor distancia_cuadrada va primero
+        random.shuffle(movimientos)
+        movimientos.sort(key=score_move)
+
+        #Intentar los movimientos en orden
+        movido = False
+        movimiento_exitoso = (0, 0)
+        
+        for mx, my in movimientos:
+            nx = self.x + mx
+            ny = self.y + my
+            
+            if self.puede_moverse(nx, ny, mapa, modo_juego):
+                self.x = nx
+                self.y = ny
+                movido = True
+                movimiento_exitoso = (mx, my)
+                break 
+
+        #Actualizar dirección para el dibujo
+        if movido:
+            self.dir_x = 1 if movimiento_exitoso[0] > 0 else -1 if movimiento_exitoso[0] < 0 else 0
+            self.dir_y = 1 if movimiento_exitoso[1] > 0 else -1 if movimiento_exitoso[1] < 0 else 0
         else:
-            # si choca, intenta cambiar a una dirección que sí pueda tomar
-            dirs_validas = self._direcciones_validas(mapa, modo_juego)
-            if dirs_validas:
-                self.dir_x, self.dir_y = random.choice(dirs_validas)
-            else:
-                # si no hay salida posible, se queda quieto
-                self.dir_x, self.dir_y = 0, 0
+            #Si no se pudo mover (bloqueo total), intenta una dirección aleatoria (o eso espero )
+            # para el siguiente frame, rompiendo el estancamiento.
+            self.dir_x, self.dir_y = random.choice([(v, 0), (-v, 0), (0, v), (0, -v)])
+            self.dir_x = 1 if self.dir_x > 0 else -1 if self.dir_x < 0 else 0
+            self.dir_y = 1 if self.dir_y > 0 else -1 if self.dir_y < 0 else 0
+
+
+    def mover_huyendo(self, jugador, mapa, modo_juego):
+        # Lógica de Búsqueda para Huida (Modo Cazador)
+        #Definición de pesos para Huir/Salida
+        salida_x = ancho_mapa - 2.5
+        salida_y = alto_mapa - 2.5
+        
+        peso_huir = 0.5
+        peso_salida = 0.5
+        dist_jugador_actual = self.distancia_jugador(jugador)
+        
+        # Ajusta los pesos: más huida si está cerca, a la salida si está lejos
+        if dist_jugador_actual < 3:
+            peso_huir = 0.8
+            peso_salida = 0.2
+        elif dist_jugador_actual > 7:
+            peso_huir = 0.2
+            peso_salida = 0.8
+
+        # 2. Lista de todos los movimientos posibles (4 direcciones)
+        v = self.velocidad
+        movimientos = [
+            (v, 0), (-v, 0), (0, v), (0, -v)
+        ]
+
+        #Función de puntuación para huida combinada
+        def score_move_flee(move):
+            mx, my = move
+            nx = self.x + mx
+            ny = self.y + my
+            
+            # Distancia del jugador (queremos MAXIMIZAR)
+            dist_jugador = ((jugador.x - nx)**2 + (jugador.y - ny)**2) ** 0.5
+            
+            # Distancia de la salida (queremos MINIMIZAR)
+            dist_salida = ((salida_x - nx)**2 + (salida_y - ny)**2) ** 0.5
+
+            # Puntuación final = (+Distancia del jugador * peso) - (+Distancia de la salida * peso)
+            # Un valor más alto significa mejor movimiento de huida Y acercamiento a la salida.
+            score = (dist_jugador * peso_huir) - (dist_salida * peso_salida) 
+            return score
+
+        #Ordenar los movimientos: el que tenga la MAYOR puntuación va primero
+        random.shuffle(movimientos)
+        movimientos.sort(key=score_move_flee, reverse=True) # reverse=True para MAXIMIZAR el score
+
+        #Intentar los movimientos en orden
+        movido = False
+        movimiento_exitoso = (0, 0)
+        
+        for mx, my in movimientos:
+            nx = self.x + mx
+            ny = self.y + my
+            
+            if self.puede_moverse(nx, ny, mapa, modo_juego):
+                self.x = nx
+                self.y = ny
+                movido = True
+                movimiento_exitoso = (mx, my)
+                break 
+
+        #Actualizar dirección para el dibujo
+        if movido:
+            self.dir_x = 1 if movimiento_exitoso[0] > 0 else -1 if movimiento_exitoso[0] < 0 else 0
+            self.dir_y = 1 if movimiento_exitoso[1] > 0 else -1 if movimiento_exitoso[1] < 0 else 0
+        else:
+            #Si no se pudo mover (bloqueo total), intenta una dirección aleatoria 
+            #para el siguiente frame, rompiendo el estancamiento.
+            self.dir_x, self.dir_y = random.choice([(v, 0), (-v, 0), (0, v), (0, -v)])
+            self.dir_x = 1 if self.dir_x > 0 else -1 if self.dir_x < 0 else 0
+            self.dir_y = 1 if self.dir_y > 0 else -1 if self.dir_y < 0 else 0
+
 
     def dibujar(self, pantalla, offset_x, offset_y):
-        # dibuja el enemigo solo si no está muerto
+        centro_x = int(self.x * tamanio_celda + offset_x)
+        centro_y = int(self.y * tamanio_celda + offset_y)
+
+        color_base = rojo
+
+        # parpadeo cuando persiguen, esta bien bonito, si o que
+        if self.estado == "perseguir" and random.random() < 0.2:
+            color_base = amarillo
+
         pygame.draw.circle(
             pantalla,
-            rojo,
-            (
-                int(self.x * tamanio_celda + tamanio_celda / 2 + offset_x),
-                int(self.y * tamanio_celda + tamanio_celda / 2 + offset_y),
-            ),
-            int(tamanio_celda / 2.5),
+            color_base,
+            (centro_x, centro_y),
+            int(tamanio_celda / 2.5)
         )
-
-    def actualizar(self, tiempo_actual):
-        # revisa si ya pasó suficiente tiempo para revivir
-        if self.muerto and tiempo_actual - self.tiempo_muerte >= self.tiempo_respawn:
-            self.muerto = False
-            return True
-        return False
-
 
 class Mapa:
     def __init__(self, ancho, alto):
@@ -477,8 +529,6 @@ class Mapa:
         # se inicia toda la matriz llena de muros
         self.matriz = [[Muro(x, y) for x in range(self.ancho)] for y in range(self.alto)]
 
-        # --- REEMPLAZO DE RECURSIÓN POR BACKTRACKING ITERATIVO ---
-        
         # Inicializa la pila de celdas a visitar
         pila = [(1, 1)] 
         self.matriz[1][1] = Camino(1, 1) # Marca el inicio como camino
@@ -487,23 +537,23 @@ class Mapa:
         direcciones = [(-2, 0), (0, 2), (2, 0), (0, -2)]
 
         while pila:
-            # 1. Toma la celda actual de la cima de la pila (backtracking)
+            #Toma la celda actual de la cima de la pila (backtracking)
             y, x = pila[-1] 
             
-            # 2. Encuentra vecinos no visitados
+            #Encuentra vecinos no visitados
             vecinos_validos = []
             random.shuffle(direcciones) # Orden aleatorio para evitar patrones
             
             for dy, dx in direcciones:
                 ny, nx = y + dy, x + dx
                 
-                # Revisa límites
+                #Revisa límites
                 if 1 <= ny < self.alto - 1 and 1 <= nx < self.ancho - 1:
                     # Revisa si la celda vecina es un Muro (no visitada)
                     if self.matriz[ny][nx].tipo == muro:
                         vecinos_validos.append((ny, nx, y + dy // 2, x + dx // 2))
 
-            # 3. Si hay vecinos no visitados, avanza
+            #Si hay vecinos no visitados, avanza
             if vecinos_validos:
                 # Elige el primer vecino (ya están en orden aleatorio)
                 ny, nx, pared_y, pared_x = vecinos_validos[0] 
@@ -515,12 +565,10 @@ class Mapa:
                 self.matriz[ny][nx] = Camino(nx, ny)
                 pila.append((ny, nx))
             else:
-                # 4. Si no hay vecinos, hace 'backtrack' (vuelve a la celda anterior)
+                #Si no hay vecinos vuelve a la celda anterior
                 pila.pop() 
                 
-        # ------------------- FIN DEL ALGORITMO ITERATIVO -------------------
-
-        # intenta asegurar que haya al menos un camino hacia la salida
+        #intenta asegurar que haya al menos un camino hacia la salida
         for i in range(1, self.alto - 1):
             if self.matriz[i][self.ancho - 3].tipo == camino:
                 self.matriz[i][self.ancho - 2] = Camino(self.ancho - 2, i)
@@ -603,6 +651,8 @@ class Juego:
         self.puntajes = self.cargar_puntajes()
         self.estado = "menu"       # controla qué pantalla se muestra
         self.modo_juego = None     # define si es modo escapa o cazador
+        self.dificultad = 1        # 1: Fácil, 2: Normal, 3: Difícil
+        self.mostrar_rejugar = False 
         self.mapa = None
         self.jugador = None
         self.enemigos = []
@@ -610,12 +660,13 @@ class Juego:
         self.trampa_cooldown = 0   # evita poner trampas repetidamente
         self.max_trampas = 3
         self.tiempo_inicio = 0
+        self.tiempo_limite = 60    # Se inicializa, pero se ajustará según la dificultad
+        self.num_enemigos = 0      # Se inicializa, pero se ajustará según la dificultad
         self.puntos = 0
         self.enemigos_escapados = 0
         self.offset_x = 50         # posiciona el mapa dentro de la ventana
         self.offset_y = 50
         
-        # --- Nueva variable para control de música urgente ---
         self.musica_urgente_activa = False 
 
         # carga imágenes y sonidos, si fallan el juego sigue funcionando
@@ -628,17 +679,15 @@ class Juego:
             self.logo_grande = None
             self.sonido_click = None
 
-        # --- Modificación para cargar nombres de archivos de música ---
+        # musicaaa
         self.sonido_menu = "onewaymenu.wav"
         self.sonido_escapa_normal = "oneWay.wav"
         self.sonido_escapa_urgente = "notime.wav"
         self.sonido_cazador_normal = "onthehunt.wav"
         self.sonido_cazador_urgente = "notimeforhunting.wav"
-        # -------------------------------------------------------------
 
         # Inicializa la música del menú al inicio
         self.reproducir_musica(self.sonido_menu)
-
 
         # botones del menú principal
         self.boton_jugar = Boton(
@@ -697,6 +746,66 @@ class Juego:
             "#6A7DFF",
             "#5665D6",
         )
+        
+        # --- BOTONES PARA SELECCIÓN DE DIFICULTAD ---
+        self.boton_facil = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 - 80,
+            300,
+            70,
+            "FÁCIL",
+            "#3FD98E",
+            "#2FB975",
+        )
+        self.boton_normal = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 + 10,
+            300,
+            70,
+            "NORMAL",
+            "#FFD966",
+            "#E6C458",
+        )
+        self.boton_dificil = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 + 100,
+            300,
+            70,
+            "DIFÍCIL",
+            "#FF5E6C",
+            "#D94A56",
+        )
+        self.boton_dificultad_volver = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 + 190,
+            300,
+            70,
+            "VOLVER",
+            "#6A7DFF",
+            "#5665D6",
+        )
+        # ---------------------------------------------
+        
+        # Botones para la ventana de puntajes!
+        self.boton_rejugar = Boton(
+            ancho_ventana / 2 - 150,
+            450, # Posición base (será ajustada)
+            300,
+            70,
+            "REJUGAR",
+            "#3FD98E",
+            "#2FB975",
+        )
+        self.boton_volver_menu = Boton(
+            ancho_ventana / 2 - 150,
+            550, # Posición base (será ajustada)
+            300,
+            70,
+            "VOLVER AL MENÚ",
+            "#6A7DFF",
+            "#5665D6",
+        )
+
 
     def reproducir_musica(self, archivo, loop=True):
         # Intenta cargar y reproducir el archivo de música
@@ -706,7 +815,7 @@ class Juego:
             pygame.mixer.music.play(-1 if loop else 0)
             self.musica_urgente_activa = False # Se resetea al poner una nueva canción
         except pygame.error as e:
-            # Imprime error si no se encuentra el archivo
+            # Imprime error si no se encuentra el archivo, por si acaso (┬┬﹏┬┬)
             print(f"Error al cargar la música '{archivo}': {e}")
             pass
 
@@ -736,24 +845,29 @@ class Juego:
         # No detener si se pasa del menú a selección de modo
         if estado_previo == "menu" and nuevo_estado == "seleccion_modo":
             detener_musica = False
-        # No detener si se pasa de selección de modo a registro
-        elif estado_previo == "seleccion_modo" and nuevo_estado == "registro":
+        # No detener si se pasa de selección de modo a registro o selección de dificultad
+        elif estado_previo == "seleccion_modo" and nuevo_estado in ["registro", "seleccion_dificultad"]:
             detener_musica = False
         # No detener si se pasa de registro o selección de modo a menú 
-        elif nuevo_estado == "menu" and estado_previo in ["seleccion_modo", "registro", "puntajes"]:
+        elif nuevo_estado == "menu" and estado_previo in ["seleccion_modo", "registro", "puntajes", "seleccion_dificultad"]:
             detener_musica = False
         # No detener si se va de la pantalla de registro/seleccion/menu al menú de puntajes
-        elif nuevo_estado == "puntajes" and estado_previo in ["menu", "seleccion_modo", "registro"]:
+        elif nuevo_estado == "puntajes" and estado_previo in ["menu", "seleccion_modo", "registro", "seleccion_dificultad"]:
+            detener_musica = False
+        # No detener si se da "volver" desde la seleccion_dificultad 
+        elif estado_previo == "seleccion_dificultad" and nuevo_estado in ["menu", "seleccion_modo", "registro", "seleccion_dificultad"]:
+            detener_musica = False
+        elif estado_previo in ["registro", "seleccion_dificultad"] and nuevo_estado in ["menu", "seleccion_modo", "registro", "seleccion_dificultad"]:
             detener_musica = False
         
-        # --- Detener la música si se requiere (principalmente al entrar a modo de juego) ---
+        #Detener la música si se requiere (principalmente al entrar a modo de juego)
         if detener_musica and pygame.mixer.music.get_busy():
             pygame.mixer.music.stop()
             self.musica_urgente_activa = False
 
         self.estado = nuevo_estado
     
-        # --- Lógica para INICIAR la Música según estado (se supone que cambia si hay poco tiempo)---
+        #musica segun estado:
 
         if nuevo_estado == "menu":
             # Solo reproduce si la música fue detenida (viene de un modo de juego) 
@@ -772,6 +886,52 @@ class Juego:
             if estado_previo in ["modo1", "modo2"]:
                 self.reproducir_musica(self.sonido_menu)
 
+    def aplicar_dificultad(self):
+        """Ajusta las variables del juego según la dificultad elegida."""
+        # Configuración por defecto (Fácil)
+        velocidad_enemigo_base = 0.05
+        prob_random_enemigo = 0.1
+        tiempo_limite_base = 60
+        num_enemigos_escapa = 4
+        num_enemigos_cazador = 4
+        
+        if self.dificultad == 1: # FÁCIL
+            self.jugador.velocidad_normal = 0.15
+            self.jugador.velocidad_correr = 0.25
+            self.jugador.consumo_energia = 0.8
+            self.jugador.recuperacion_energia = 0.5
+            
+            self.tiempo_limite = tiempo_limite_base + 30
+            self.num_enemigos = num_enemigos_escapa if self.modo_juego == 1 else num_enemigos_cazador
+            
+        elif self.dificultad == 2: # NORMAL
+            self.jugador.velocidad_normal = 0.12
+            self.jugador.velocidad_correr = 0.20
+            self.jugador.consumo_energia = 1.0
+            self.jugador.recuperacion_energia = 0.4
+            
+            velocidad_enemigo_base = 0.07 
+            
+            self.tiempo_limite = tiempo_limite_base
+            self.num_enemigos = num_enemigos_escapa + 2 if self.modo_juego == 1 else num_enemigos_cazador + 2
+            
+        elif self.dificultad == 3: # DIFÍCIL
+            self.jugador.velocidad_normal = 0.10
+            self.jugador.velocidad_correr = 0.15
+            self.jugador.consumo_energia = 1.5
+            self.jugador.recuperacion_energia = 0.2
+            
+            velocidad_enemigo_base = 0.10 
+            prob_random_enemigo = 0.05 # Menos aleatorio = más "inteligente"
+            
+            self.tiempo_limite = tiempo_limite_base - 10
+            self.num_enemigos = num_enemigos_escapa + 3 if self.modo_juego == 1 else num_enemigos_cazador + 3
+
+        # Aplica velocidad y comportamiento a los enemigos actuales
+        for enemigo in self.enemigos:
+            enemigo.velocidad = velocidad_enemigo_base
+            enemigo.cambio_cada = random.randint(30, 90) 
+            
     def reiniciar_juego(self):
         # reinicia todo para comenzar una nueva partida
         self.mapa = Mapa(ancho_mapa, alto_mapa)
@@ -780,15 +940,22 @@ class Juego:
         self.trampas = []
         self.trampa_cooldown = 0
         self.tiempo_inicio = time.time()
-        self.tiempo_limite = 60
+        # self.tiempo_limite y self.num_enemigos se definen en aplicar_dificultad
         self.puntos = 0
         self.enemigos_escapados = 0
         self.musica_urgente_activa = False # Se resetea al iniciar
+        self.mostrar_rejugar = False # Se reinicia aquí también, aunque se sobrescribirá si el juego termina.
 
-        # crea enemigos dependiendo del modo de juego
-        num_enemigos = 3 if self.modo_juego == 1 else 2
-        for _ in range(num_enemigos):
+        # PRIMERO: Aplica la dificultad para configurar variables de jugador y enemigos
+        self.aplicar_dificultad()
+
+        # SEGUNDO: crea enemigos usando el número ajustado por dificultad
+        for _ in range(self.num_enemigos):
             self.generar_enemigo()
+            
+        # TERCERO: Vuelve a aplicar la dificultad a los nuevos enemigos creados
+        self.aplicar_dificultad()
+
 
     def generar_enemigo(self):
         """
@@ -836,9 +1003,19 @@ class Juego:
 
     def agregar_puntaje(self, modo, puntos):
         # agrega un nuevo puntaje a la lista del modo seleccionado
+        #bonificación por dificultad para el puntaje final
+        if self.dificultad == 1:
+            multiplicador = 0.8 # Menos puntos por jugar fácil
+        elif self.dificultad == 2:
+            multiplicador = 1.0
+        else:
+            multiplicador = 1.2 # Más puntos por jugar difícil
+            
+        puntos_finales = int(puntos * multiplicador)
+
         entrada = {
-            "nombre": self.nombre_jugador,
-            "puntos": puntos,
+            "nombre": f"{self.nombre_jugador}  ({self.dificultad})", # Se añade la dificultad al nombre
+            "puntos": puntos_finales,
             "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
 
@@ -864,7 +1041,7 @@ class Juego:
     def dibujar_menu(self):
         """pinta la pantalla del menú principal"""
         self.pantalla.fill(fondo_menu)
-        # si el logo está disponible lo muestra, si no usa texto
+        # si el logo está disponible lo muestra, si no usa texto, medida de seguridad (┬┬﹏┬┬)
         if self.logo_grande:
             logo_rect = self.logo_grande.get_rect(
                 center=(ancho_ventana / 2, (alto_ventana / 2) - 200)
@@ -887,11 +1064,30 @@ class Juego:
         self.boton_escapa.draw(self.pantalla, fuente_boton)
         self.boton_cazador.draw(self.pantalla, fuente_boton)
         self.boton_volver.draw(self.pantalla, fuente_boton)
+        
+    def dibujar_seleccion_dificultad(self):
+        # Muestra la pantalla donde se elige la dificultad
+        self.pantalla.fill(fondo_menu)
+        self.dibujar_texto(
+            "SELECCIONA DIFICULTAD", 280, 150, fuente1, blanco
+        )
+        
+        # Dibuja los botones de dificultad
+        self.boton_facil.draw(self.pantalla, fuente_boton)
+        self.boton_normal.draw(self.pantalla, fuente_boton)
+        self.boton_dificil.draw(self.pantalla, fuente_boton)
+        self.boton_dificultad_volver.draw(self.pantalla, fuente_boton)
 
     def dibujar_registro(self):
         # pantalla donde el jugador escribe su nombre
         self.pantalla.fill(fondo_menu)
-        self.dibujar_texto("Ingresa tu nombre:", 280, 250, fuente1, blanco)
+        # Muestra el modo y dificultad seleccionados
+        modo_texto = "ESCAPA" if self.modo_juego == 1 else "CAZADOR"
+        dificultad_mapa = {1: "FÁCIL", 2: "NORMAL", 3: "DIFÍCIL"}
+        dificultad_texto = dificultad_mapa.get(self.dificultad, "NORMAL")
+        self.dibujar_texto(f"Modo: {modo_texto} ({dificultad_texto})", 340, 150, fuente_pequeña, amarillo)
+        
+        self.dibujar_texto("Ingresa tu nombre:", 340, 250, fuente1, blanco)
 
         # cuadro donde se escribe el nombre
         caja_texto = pygame.Rect(300, 320, 400, 60)
@@ -901,9 +1097,9 @@ class Juego:
         self.dibujar_texto(self.nombre_jugador, 320, 335, fuente_input, negro)
 
         self.dibujar_texto(
-            "Presiona ENTER para continuar", 250, 450, fuente_pequeña, blanco
+            "Presiona ENTER para comenzar", 360, 450, fuente_pequeña, blanco
         )
-        self.dibujar_texto("ESC para volver", 380, 490, fuente_pequeña, blanco)
+        self.dibujar_texto("ESC para volver", 430, 490, fuente_pequeña, blanco)
 
     def dibujar_juego(self):
         self.pantalla.fill(negro)
@@ -927,39 +1123,26 @@ class Juego:
         tiempo_restante = self.tiempo_limite - tiempo_transcurrido
         if tiempo_restante < 0:
             tiempo_restante = 0
-        self.dibujar_texto(f"Tiempo: {tiempo_restante}s", 800, 20, fuente_pequeña, blanco)
+        self.dibujar_texto(f"Tiempo: {tiempo_restante}s", 830, 20, fuente_pequeña, blanco)
 
-        # --- Lógica de música urgente (FIXED) ---
-        # 1. MÚSICA URGENTE TEMPRANA (31 segundos transcurridos)
-        # Si han pasado entre 31 y 50 segundos, activa la música urgente.
-        if 31 <= tiempo_transcurrido <= 50:
+        #musica cuando se va acabando el tiempo
+        if tiempo_restante <= 15:
             if not self.musica_urgente_activa:
                 if self.modo_juego == 1:
                     self.cambiar_a_musica_urgente(self.sonido_escapa_urgente)
                 elif self.modo_juego == 2:
                     self.cambiar_a_musica_urgente(self.sonido_cazador_urgente)
         
-        # 2. MÚSICA URGENTE FINAL (10 segundos restantes)
-        # Si quedan 10 segundos o menos, asegura que la música urgente esté activa.
-        elif tiempo_restante <= 10:
-            if not self.musica_urgente_activa:
-                if self.modo_juego == 1:
-                    self.cambiar_a_musica_urgente(self.sonido_escapa_urgente)
-                elif self.modo_juego == 2:
-                    self.cambiar_a_musica_urgente(self.sonido_cazador_urgente)
-        
-        # 3. REGRESO A MÚSICA NORMAL 
-        # Si la música urgente está activa, pero el tiempo ha vuelto a una zona "segura", cambia a normal.
+        #REGRESO A MÚSICA NORMAL 
         else:
             if self.musica_urgente_activa:
                 if self.modo_juego == 1:
                     self.reproducir_musica(self.sonido_escapa_normal)
                 elif self.modo_juego == 2:
                     self.reproducir_musica(self.sonido_cazador_normal)
-        # -------------------------------
 
         # muestra los puntos actuales
-        self.dibujar_texto(f"Puntos: {self.puntos}", 800, 50, fuente_pequeña, blanco)
+        self.dibujar_texto(f"Puntos: {self.puntos}", 830, 50, fuente_pequeña, blanco)
 
         # barra de energía del jugador
         pygame.draw.rect(self.pantalla, rojo, (50, 620, 200, 20))
@@ -975,7 +1158,7 @@ class Juego:
             # en modo escapa, se muestran trampas restantes
             self.dibujar_texto(
                 f"Trampas: {self.max_trampas - len(self.trampas)}/3",
-                800,
+                830,
                 80,
                 fuente_pequeña,
                 blanco,
@@ -984,22 +1167,22 @@ class Juego:
             # en modo cazador, se muestra cuántos enemigos lograron huir
             self.dibujar_texto(
                 f"Escapados: {self.enemigos_escapados}",
-                800,
+                830,
                 80,
                 fuente_pequeña,
                 blanco,
             )
 
-        # controles del juego mostrados en pantalla
+        # Controles del juego
         self.dibujar_texto(
             "WASD/Flechas: Mover | Shift: Correr",
             260,
-            670,
+            650,
             fuente_pequeña,
             blanco,
         )
         if self.modo_juego == 1:
-            self.dibujar_texto("Espacio: Trampa", 420, 650, fuente_pequeña, blanco)
+            self.dibujar_texto("Espacio: Trampa", 650, 650, fuente_pequeña, blanco)
 
 
     def dibujar_puntajes(self):
@@ -1020,75 +1203,97 @@ class Juego:
             texto = f"{i+1}. {entrada['nombre']}: {entrada['puntos']} pts"
             self.dibujar_texto(texto, 550, 180 + i * 30, fuente_pequeña, blanco)
 
-        # mensaje para volver al menú
-        self.dibujar_texto("Presiona ESC para volver", 320, 550, fuente_pequeña, blanco)
-
+        # POSICION DE BOTONES!
+        # Posición base de los botones
+        y_rejugar = 450
+        y_menu = 550
+        
+        if not self.mostrar_rejugar:
+            # Si NO se puede rejugar, subimos el botón "VOLVER AL MENÚ"
+            y_menu = 450 
+        
+        # Dibujar botón REJUGAR (Solo si se activó la bandera para que no salga cuando no se ha jugado previamente jsjs)
+        if self.mostrar_rejugar:
+            self.boton_rejugar.rect.y = y_rejugar
+            self.boton_rejugar.draw(self.pantalla, fuente_boton)
+            
+        # Dibujar botón VOLVER AL MENÚ
+        self.boton_volver_menu.rect.y = y_menu
+        self.boton_volver_menu.draw(self.pantalla, fuente_boton)
 
     def actualizar_juego(self):
         tiempo_actual = time.time()
-
-        # actualiza el comportamiento de todos los enemigos uno por uno
+        # Recorremos una copia de la lista para poder modificarla (eliminar enemigos)
         for enemigo in self.enemigos[:]:
-
-            # si el enemigo está muerto, revisa si ya debe revivir
+            # Este bloque asegura que un enemigo recién atrapado sea eliminado y reemplazado.
             if enemigo.muerto:
-                if enemigo.actualizar(tiempo_actual):
-                    # si revive, se genera uno nuevo y este se elimina
-                    self.generar_enemigo()
+                if enemigo in self.enemigos:
                     self.enemigos.remove(enemigo)
+                    self.generar_enemigo()
+                continue
 
-            else:
-                # movimiento según el modo
+            enemigo.mover(
+                self.jugador, self.mapa.matriz, self.modo_juego
+            )
+
+            # distancia para verificar colisión entre jugador y enemigo
+            distancia = (
+                (enemigo.x - self.jugador.x) ** 2
+                + (enemigo.y - self.jugador.y) ** 2
+            ) ** 0.5
+
+            # si hay colisión
+            if distancia < 0.7:
                 if self.modo_juego == 1:
-                    # modo escapa: el enemigo persigue al jugador
-                    enemigo.mover_hacia(
-                        self.jugador.x, self.jugador.y, self.mapa.matriz, True, self.modo_juego
-                    )
+                    # Si atrapan al jugador el puntaje siempre = 0 (me parece mejor por como manejamos el puntaje, antes si se atrapaba muy antes dejaba un puntaje muy alto)
+                    self.puntos = 0
+                    self.agregar_puntaje(1, self.puntos)
+                    self.mostrar_rejugar = True
+                    self.cambiar_estado("puntajes")
+                    return
                 else:
-                    # modo cazador: huye del jugador y busca la salida
-                    enemigo.mover_hacia(
-                        self.jugador.x, self.jugador.y, self.mapa.matriz, False, self.modo_juego
-                    )
+                    # modo cazador: jugador atrapa enemigo
+                    self.puntos += 100
+                    self.enemigos.remove(enemigo)
+                    self.generar_enemigo()
+                    # Se re-aplica la dificultad para el nuevo enemigo generado
+                    self.aplicar_dificultad() 
+                    continue
 
-                # distancia para verificar colisión entre jugador y enemigo
-                distancia = (
-                    (enemigo.x - self.jugador.x) ** 2
-                    + (enemigo.y - self.jugador.y) ** 2
-                ) ** 0.5
+            # si estamos en modo cazador, revisamos si el enemigo llegó a la salida
+            if self.modo_juego == 2:
+                # Verificación de que el centro del enemigo está en la celda de salida
+                if self.mapa.matriz[int(enemigo.y)][int(enemigo.x)].tipo == salida:
+                    self.puntos = max(0, self.puntos - 50)
+                    self.enemigos_escapados += 1
+                    self.enemigos.remove(enemigo)
+                    self.generar_enemigo()
+                    # Se re-aplica la dificultad para el nuevo enemigo generado
+                    self.aplicar_dificultad() 
+                    continue
 
-                # si hay colisión
-                if distancia < 0.7:
-                    if self.modo_juego == 1:
-                        # modo escapa: perder
-                        tiempo_total = int(time.time() - self.tiempo_inicio)
-                        # puntaje depende del tiempo que tardó el enemigo en atraparte
-                        self.puntos += max(0, 10000 - tiempo_total * 10)
-                        self.agregar_puntaje(1, self.puntos)
-                        self.cambiar_estado("puntajes") # Usa la nueva función
-                        return
-                    else:
-                        # modo cazador: jugador atrapa enemigo
-                        self.puntos += 100
+            # LÓGICA DE TRAMPA CORREGIDA
+            enemigo_atrapado = False
+            for trampa in self.trampas[:]:
+                # Colisión: compara la posición central del enemigo con la posición central de la trampa
+                if abs(enemigo.x - (trampa.x + 0.5)) < 0.7 and abs(enemigo.y - (trampa.y + 0.5)) < 0.7:
+                    
+                    # Elimina el enemigo y lo reemplaza (lo hace "desaparecer")
+                    if enemigo in self.enemigos:
                         self.enemigos.remove(enemigo)
                         self.generar_enemigo()
-                        continue
+                        # Se re-aplica la dificultad para el nuevo enemigo generado
+                        self.aplicar_dificultad() 
+                    
+                    # Elimina la trampa
+                    self.trampas.remove(trampa)
+                    self.puntos += 50
+                    enemigo_atrapado = True
+                    break
 
-                # si estamos en modo cazador, revisamos si el enemigo llegó a la salida
-                if self.modo_juego == 2:
-                    if self.mapa.matriz[int(enemigo.y)][int(enemigo.x)].tipo == salida:
-                        self.puntos = max(0, self.puntos - 50) #retorna el maximo, entonces nunca va a ser menor que 0, yupi!!
-                        self.enemigos_escapados += 1
-                        self.enemigos.remove(enemigo)
-                        self.generar_enemigo()
-
-                # revisa si el enemigo cayó en una trampa
-                for trampa in self.trampas[:]:
-                    if abs(enemigo.x - trampa.x) < 0.7 and abs(enemigo.y - trampa.y) < 0.7:
-                        enemigo.muerto = True
-                        enemigo.tiempo_muerte = tiempo_actual
-                        self.trampas.remove(trampa)
-                        self.puntos += 50
-
+            if enemigo_atrapado:
+                continue
+            
         # verificar si el jugador llegó a la salida en modo escapa
         if self.modo_juego == 1:
             if self.mapa.matriz[int(self.jugador.y)][int(self.jugador.x)].tipo == salida:
@@ -1096,7 +1301,8 @@ class Juego:
                 tiempo_total = int(time.time() - self.tiempo_inicio)
                 self.puntos += max(0, 10000 - tiempo_total * 10 + len(self.enemigos) * 500)
                 self.agregar_puntaje(1, self.puntos)
-                self.cambiar_estado("puntajes") # Usa la nueva función
+                self.mostrar_rejugar = True #FIN DE PARTIDA: SE ACTIVA REJUGAR
+                self.cambiar_estado("puntajes")
                 return
 
         # manejo del tiempo límite del nivel
@@ -1107,7 +1313,8 @@ class Juego:
                 self.agregar_puntaje(1, self.puntos)
             else:
                 self.agregar_puntaje(2, self.puntos)
-            self.cambiar_estado("puntajes") # Usa la nueva función
+            self.mostrar_rejugar = True #FIN DE PARTIDA: SE ACTIVA REJUGAR
+            self.cambiar_estado("puntajes")
             return
         
     def ejecutar(self):
@@ -1127,6 +1334,7 @@ class Juego:
                     elif self.boton_puntajes.clicked(evento):
                         if self.sonido_click:
                             self.sonido_click.play()
+                        self.mostrar_rejugar = False #ACCESO DESDE MENÚ: SE DESACTIVA REJUGAR
                         # La música del menú continúa por la nueva excepción en cambiar_estado
                         self.cambiar_estado("puntajes")
                     elif self.boton_salir.clicked(evento):
@@ -1140,16 +1348,50 @@ class Juego:
                         if self.sonido_click:
                             self.sonido_click.play()
                         self.modo_juego = 1
-                        # Pasa a pantalla para escribir nombre (la música del menú continúa)
-                        self.cambiar_estado("registro")
+                        # Pasa a selección de dificultad
+                        self.cambiar_estado("seleccion_dificultad")
                     elif self.boton_cazador.clicked(evento):
                         if self.sonido_click:
                             self.sonido_click.play()
                         self.modo_juego = 2
-                        self.cambiar_estado("registro")
+                        # Pasa a selección de dificultad
+                        self.cambiar_estado("seleccion_dificultad")
                     elif self.boton_volver.clicked(evento):
                         if self.sonido_click:
                             self.sonido_click.play()
+                        self.cambiar_estado("menu")
+                
+                # Menú de selección de dificultad
+                elif self.estado == "seleccion_dificultad":
+                    if self.boton_facil.clicked(evento):
+                        if self.sonido_click: self.sonido_click.play()
+                        self.dificultad = 1
+                        self.cambiar_estado("registro")
+                    elif self.boton_normal.clicked(evento):
+                        if self.sonido_click: self.sonido_click.play()
+                        self.dificultad = 2
+                        self.cambiar_estado("registro")
+                    elif self.boton_dificil.clicked(evento):
+                        if self.sonido_click: self.sonido_click.play()
+                        self.dificultad = 3
+                        self.cambiar_estado("registro")
+                    elif self.boton_dificultad_volver.clicked(evento):
+                        if self.sonido_click: self.sonido_click.play()
+                        self.dificultad = 1 # Se resetea a fácil por defecto
+                        self.cambiar_estado("seleccion_modo")
+                
+                # --- MANEJO DE BOTONES EN PANTALLA DE PUNTAJES ---
+                elif self.estado == "puntajes":
+                    if self.mostrar_rejugar and self.boton_rejugar.clicked(evento):
+                        if self.sonido_click:
+                            self.sonido_click.play()
+                        # Reinicia la partida con el mismo nombre y modo
+                        self.reiniciar_juego()
+                        self.cambiar_estado(f"modo{self.modo_juego}")
+                    elif self.boton_volver_menu.clicked(evento):
+                        if self.sonido_click:
+                            self.sonido_click.play()
+                        # Vuelve al menú principal
                         self.cambiar_estado("menu")
 
                 # manejo del teclado
@@ -1168,14 +1410,14 @@ class Juego:
 
                         # volver atrás
                         elif evento.key == pygame.K_ESCAPE:
-                            self.cambiar_estado("seleccion_modo")
+                            self.cambiar_estado("seleccion_dificultad")
                             self.nombre_jugador = ""
 
                         # escribir caracteres válidos (máx 15)
                         elif len(self.nombre_jugador) < 15 and evento.unicode.isprintable():
                             self.nombre_jugador += evento.unicode
 
-                    # desde la pantalla de puntajes puede volver al menú
+                    # desde la pantalla de puntajes puede volver al menú (por si presionan ESC)
                     elif self.estado == "puntajes":
                         if evento.key == pygame.K_ESCAPE:
                             self.cambiar_estado("menu")
@@ -1218,8 +1460,8 @@ class Juego:
                 # colocar trampa (solo modo 1)
                 if keys[pygame.K_SPACE] and self.modo_juego == 1:
                     tiempo_actual = time.time()
-                    # limita trampas y tiene un tiempo de espera entre trampas
-                    if len(self.trampas) < self.max_trampas and tiempo_actual - self.trampa_cooldown >= 5:
+                    # Cooldown de 2 segundos (Modificación anterior)
+                    if len(self.trampas) < self.max_trampas and tiempo_actual - self.trampa_cooldown >= 2: 
                         self.trampas.append(Trampa(int(self.jugador.x), int(self.jugador.y)))
                         self.trampa_cooldown = tiempo_actual
 
@@ -1231,13 +1473,14 @@ class Juego:
                 self.dibujar_menu()
             elif self.estado == "seleccion_modo":
                 self.dibujar_seleccion_modo()
+            elif self.estado == "seleccion_dificultad":
+                self.dibujar_seleccion_dificultad()
             elif self.estado == "registro":
                 self.dibujar_registro()
             elif self.estado in ["modo1", "modo2"]:
                 self.dibujar_juego()
             elif self.estado == "puntajes":
                 self.dibujar_puntajes()
-                
 
             # refresca pantalla
             pygame.display.flip()
