@@ -680,10 +680,10 @@ class Juego:
             self.sonido_click = None
 
         # musicaaa
-        self.sonido_menu = "onewaymenu.wav"
-        self.sonido_escapa_normal = "oneWay.wav"
+        self.sonido_menu = "onewaymenuLOOPED.wav"
+        self.sonido_escapa_normal = "oneWayLOOPED.wav"
         self.sonido_escapa_urgente = "notime.wav"
-        self.sonido_cazador_normal = "onthehunt.wav"
+        self.sonido_cazador_normal = "onthehuntLOOPED.wav"
         self.sonido_cazador_urgente = "notimeforhunting.wav"
 
         # Inicializa la música del menú al inicio
