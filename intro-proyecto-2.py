@@ -562,4 +562,203 @@ class Mapa:
         for fila in self.matriz:
             for casilla in fila:
                 casilla.dibujar(pantalla, offset_x, offset_y)
+class Juego:
+    def __init__(self):
+        # crea la ventana del juego y configuraciones iniciales
+        self.pantalla = pygame.display.set_mode((ancho_ventana, alto_ventana))
+        pygame.display.set_caption("Proyecto de intro de Mari y Junn (❁´◡`❁)")
+        self.reloj = pygame.time.Clock()
+
+        # variables principales del estado del juego
+        self.nombre_jugador = ""
+        self.puntajes = self.cargar_puntajes()
+        self.estado = "menu"       # controla qué pantalla se muestra
+        self.modo_juego = None     # define si es modo escapa o cazador
+        self.mapa = None
+        self.jugador = None
+        self.enemigos = []
+        self.trampas = []
+        self.trampa_cooldown = 0   # evita poner trampas repetidamente
+        self.max_trampas = 3
+        self.tiempo_inicio = 0
+        self.puntos = 0
+        self.enemigos_escapados = 0
+        self.offset_x = 50         # posiciona el mapa dentro de la ventana
+        self.offset_y = 50
+
+        # carga imágenes y sonidos, si fallan el juego sigue funcionando
+        try:
+            self.logo = pygame.image.load("oneway.png")
+            self.logo_grande = pygame.transform.scale(self.logo, (400, 230))
+            self.sonido_click = pygame.mixer.Sound("pop.wav")
+            self.sonido_click.set_volume(0.6)
+        except:
+            self.logo_grande = None
+            self.sonido_click = None
+
+        # botones del menú principal
+        self.boton_jugar = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 + 0,
+            300,
+            70,
+            "JUGAR",
+            "#3FD98E",
+            "#2FB975",
+        )
+        self.boton_puntajes = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 + 90,
+            300,
+            70,
+            "PUNTAJES",
+            "#6A7DFF",
+            "#5665D6",
+        )
+        self.boton_salir = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 + 180,
+            300,
+            70,
+            "SALIR",
+            "#FF5E6C",
+            "#D94A56",
+        )
+
+        # botones del menú de selección de modos
+        self.boton_escapa = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 - 50,
+            300,
+            70,
+            "MODO ESCAPA",
+            "#3FD98E",
+            "#2FB975",
+        )
+        self.boton_cazador = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 + 40,
+            300,
+            70,
+            "MODO CAZADOR",
+            "#FF5E6C",
+            "#D94A56",
+        )
+        self.boton_volver = Boton(
+            ancho_ventana / 2 - 150,
+            alto_ventana / 2 + 130,
+            300,
+            70,
+            "VOLVER",
+            "#6A7DFF",
+            "#5665D6",
+        )
+
+    def reiniciar_juego(self):
+        # reinicia todo para comenzar una nueva partida
+        self.mapa = Mapa(ancho_mapa, alto_mapa)
+        self.jugador = Jugador(1.5, 1.5)
+        self.enemigos = []
+        self.trampas = []
+        self.trampa_cooldown = 0
+        self.tiempo_inicio = time.time()
+        self.tiempo_limite = 60
+        self.puntos = 0
+        self.enemigos_escapados = 0
+
+        # crea enemigos dependiendo del modo de juego
+        num_enemigos = 3 if self.modo_juego == 1 else 2
+        for _ in range(num_enemigos):
+            self.generar_enemigo()
+
+    def generar_enemigo(self):
+        """
+        elige una posición válida del mapa para colocar un enemigo,
+        evitando que aparezca demasiado cerca del jugador o de la salida
+        """
+        intentos = 0
+        MIN_DIST_JUGADOR = 8 
+        MIN_DIST_SALIDA = 12 
+        salida_x = ancho_mapa - 2
+        salida_y = alto_mapa - 2
+
+        while intentos < 200:
+            x = random.randint(3, ancho_mapa - 4)
+            y = random.randint(3, alto_mapa - 4)
+            casilla = self.mapa.matriz[y][x]
+            
+            # distancia en pasos (solo sumas, no diagonal)
+            dist_jugador = abs(x - self.jugador.x) + abs(y - self.jugador.y)
+            dist_salida = abs(x - salida_x) + abs(y - salida_y)
+            
+            # debe caer sobre un camino y estar lo suficientemente lejos
+            if (
+                casilla.tipo == camino
+                and dist_jugador > MIN_DIST_JUGADOR
+                and dist_salida > MIN_DIST_SALIDA
+            ):
+                # se crea el enemigo justo al centro de la casilla
+                self.enemigos.append(Enemigo(x + 0.5, y + 0.5))
+                return
+            intentos += 1
+
+    def cargar_puntajes(self):
+        # lee el archivo de puntajes, si no existe crea una estructura vacía
+        try:
+            with open("puntajes.json", "r") as f:
+                return json.load(f)
+        except:
+            return {"modo1": [], "modo2": []}
+
+    def guardar_puntajes(self):
+        # guarda el estado actual de los mejores puntajes
+        with open("puntajes.json", "w") as f:
+            json.dump(self.puntajes, f)
+
+    def agregar_puntaje(self, modo, puntos):
+        # agrega un nuevo puntaje a la lista del modo seleccionado
+        entrada = {
+            "nombre": self.nombre_jugador,
+            "puntos": puntos,
+            "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+
+        lista = self.puntajes[f"modo{modo}"]
+        lista.append(entrada)
+
+        # ordena para dejar arriba los mejores puntajes
+        lista.sort(key=lambda x: x["puntos"], reverse=True)
+
+        # se guardan solo los mejores 5
+        self.puntajes[f"modo{modo}"] = lista[:5]
+        self.guardar_puntajes()
+
+    def dibujar_texto(self, texto, x, y, fuente=None, color=None):
+        # dibuja cualquier texto en pantalla de forma centralizada
+        if fuente is None:
+            fuente = fuente1
+        if color is None:
+            color = negro
+        superficie = fuente.render(texto, True, color)
+        self.pantalla.blit(superficie, (x, y))
+
+    def dibujar_menu(self):
+        """pinta la pantalla del menú principal"""
+        self.pantalla.fill(fondo_menu)
+
+        # si el logo está disponible lo muestra, si no usa texto
+        if self.logo_grande:
+            logo_rect = self.logo_grande.get_rect(
+                center=(ancho_ventana / 2, (alto_ventana / 2) - 200)
+            )
+            self.pantalla.blit(self.logo_grande, logo_rect)
+        else:
+            self.dibujar_texto("JUEGO ESCAPA/CAZADOR", 200, 150, fuente1, blanco)
+
+        # dibuja los botones principales
+        self.boton_jugar.draw(self.pantalla, fuente_boton)
+        self.boton_puntajes.draw(self.pantalla, fuente_boton)
+        self.boton_salir.draw(self.pantalla, fuente_boton)
+# faltan algunas cosillas que estoy terminando
+
 
