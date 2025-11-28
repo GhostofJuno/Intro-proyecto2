@@ -1,16 +1,24 @@
+#mari a mi esto ya me corre al 100, confirmalo si puedes. No se te olvide descargarle las cosas que subi
+#voy a ver si puedo cambiarle cosas del funcionamiento luego, esa gente actua rarillo
 import pygame
 import random
+import json
+import time 
+from datetime import datetime #esto es para los puntajes tmb ya habia puesto el archivo :3
 
 pygame.init()
+pygame.mixer.init() #esto es para los rolones
 
 # Constantes
-fondo_menu = "#12382C"
+fondo_menu = "#58934C"
 ancho_ventana = 1000
 alto_ventana = 700
 ancho_mapa = 25
 alto_mapa = 20
 tamanio_celda = 30
 fps = 60
+
+# La inicialización de fuentes debe ir después de pygame.init()
 fuente1 = pygame.font.SysFont("Arial", 48)
 fuente_boton = pygame.font.SysFont("Arial", 40)
 fuente_pequeña = pygame.font.SysFont("Arial", 24)
@@ -61,7 +69,7 @@ class Casilla:
         pygame.draw.rect(pantalla, negro, 
                         (self.x * tamanio_celda + offset_x, 
                          self.y * tamanio_celda + offset_y, 
-                            tamanio_celda, tamanio_celda), 1) #a usted no le molesta que salga roja la identacion? a mi si jajsj
+                            tamanio_celda, tamanio_celda), 1) 
 
 
 class Camino(Casilla):
@@ -133,7 +141,7 @@ class Salida(Casilla):
         return True
     
     def dibujar(self, pantalla, offset_x, offset_y):
-        # dibuja la casilla y coloca la letra 'E' al centro para marcar la salida  #pq "E"? de "escape"?
+        # dibuja la casilla y coloca la letra 'E' al centro para marcar la salida
         Casilla.dibujar(self, pantalla, offset_x, offset_y)
         centro_x = self.x * tamanio_celda + tamanio_celda // 2 + offset_x
         centro_y = self.y * tamanio_celda + tamanio_celda // 2 + offset_y
@@ -156,7 +164,7 @@ class Trampa:
                            int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)),
                             int(tamanio_celda/3))
 
-class Boton: #yo no voy a estar haciendo los botones uno por uno ~_~
+class Boton:
     def __init__(self, x, y, ancho, alto, texto, color, color_hover):
         self.rect = pygame.Rect(x, y, ancho, alto)
         self.texto = texto
@@ -194,7 +202,7 @@ class Jugador:
         self.consumo_energia = 0.8
         self.corriendo = False
         
-    def mover(self, dx, dy, mapa):
+    def mover(self, dx, dy, mapa, modo_juego): 
         nueva_x = self.x + dx
         nueva_y = self.y + dy
         
@@ -213,8 +221,24 @@ class Jugador:
         for ex, ey in esquinas: #revisa las esquinas alrededor del jugador para evitar que se meta
             if ex < 0 or ex >= ancho_mapa or ey < 0 or ey >= alto_mapa:
                 return False
-            if not mapa[int(ey)][int(ex)].puede_pasar_jugador(): #revisa tipo de casilla
+            
+            # Se convierte a entero para usar como índice de matriz
+            celda_x, celda_y = int(ex), int(ey)
+
+            # Revisa límites después de convertir a int
+            if not (0 <= celda_y < alto_mapa and 0 <= celda_x < ancho_mapa):
+                 return False
+
+            casilla = mapa[celda_y][celda_x]
+
+            if not casilla.puede_pasar_jugador(): #revisa tipo de casilla
                 return False
+            
+            # Lógica especial de paso para el jugador (Modo Escapa 1)
+            # En modo Escapa, el jugador NO puede pasar por Lianas (actúan como Muro)
+            if modo_juego == 1 and casilla.tipo == liana:
+                return False
+
         
         self.x = nueva_x
         self.y = nueva_y
@@ -231,13 +255,12 @@ class Jugador:
             if self.energia > self.energia_max:
                 self.energia = self.energia_max
     
-    def dibujar(self, pantalla, offset_x, offset_y):#TODO: lo podemos cambiar luego, si quieras un bichito o lo dejamos como bolita, cuando lo corramos vemos :3
+    def dibujar(self, pantalla, offset_x, offset_y):
         pygame.draw.circle(pantalla, verde_jugador,  
                           (int(self.x * tamanio_celda + tamanio_celda/2 + offset_x), #x del circulo
                            int(self.y * tamanio_celda + tamanio_celda/2 + offset_y)), #y del circulo
                             int(tamanio_celda/2.5)) #radio
 class Enemigo:
-
     def __init__(self, x, y):
         # posición como float para permitir movimiento suave
         self.x = float(x)
@@ -439,7 +462,6 @@ class Enemigo:
             return True
         return False
 
-# JUNOO, lo que hce fue compltar más y acomodarlo, las funciones de la interfaz las ponemos luego para mantener el ordeen ✌️✌️  #okss
 
 class Mapa:
     def __init__(self, ancho, alto):
@@ -455,6 +477,8 @@ class Mapa:
         # se inicia toda la matriz llena de muros
         self.matriz = [[Muro(x, y) for x in range(self.ancho)] for y in range(self.alto)]
 
+        # --- REEMPLAZO DE RECURSIÓN POR BACKTRACKING ITERATIVO ---
+        
         # Inicializa la pila de celdas a visitar
         pila = [(1, 1)] 
         self.matriz[1][1] = Camino(1, 1) # Marca el inicio como camino
@@ -463,7 +487,7 @@ class Mapa:
         direcciones = [(-2, 0), (0, 2), (2, 0), (0, -2)]
 
         while pila:
-            # 1. Toma la celda actual de la cima de la pila
+            # 1. Toma la celda actual de la cima de la pila (backtracking)
             y, x = pila[-1] 
             
             # 2. Encuentra vecinos no visitados
@@ -473,7 +497,7 @@ class Mapa:
             for dy, dx in direcciones:
                 ny, nx = y + dy, x + dx
                 
-                # Revisa los límites
+                # Revisa límites
                 if 1 <= ny < self.alto - 1 and 1 <= nx < self.ancho - 1:
                     # Revisa si la celda vecina es un Muro (no visitada)
                     if self.matriz[ny][nx].tipo == muro:
@@ -491,8 +515,10 @@ class Mapa:
                 self.matriz[ny][nx] = Camino(nx, ny)
                 pila.append((ny, nx))
             else:
-                # 4. Si no hay vecinos, hace vuelve a la celda anterior
+                # 4. Si no hay vecinos, hace 'backtrack' (vuelve a la celda anterior)
                 pila.pop() 
+                
+        # ------------------- FIN DEL ALGORITMO ITERATIVO -------------------
 
         # intenta asegurar que haya al menos un camino hacia la salida
         for i in range(1, self.alto - 1):
@@ -523,7 +549,7 @@ class Mapa:
                 if vecinos_camino == 2:
                     self.matriz[y][x] = Camino(x, y)
 
-        # coloca túneles para el jugador en posiciones válidas
+        # coloca túneles para el jugador en posiciones válidas y poco visibles
         tuneles_creados = 0
         for y in range(2, self.alto - 2):
             for x in range(2, self.ancho - 2):
@@ -555,13 +581,16 @@ class Mapa:
                             lianas_creadas += 1
 
         # marca la salida en la esquina inferior derecha
-        self.matriz[self.alto - 2][self.ancho - 2] = Salida(self.ancho - 2, self.alto - 2)
+        self.matriz[self.alto - 2][self.ancho - 2] = Salida(
+            self.ancho - 2, self.alto - 2
+        )
 
     def dibujar(self, pantalla, offset_x, offset_y):
-        # recorre toda la matriz y dibuja cada casilla según su tipo :3333
+        # recorre toda la matriz y dibuja cada casilla según su tipo
         for fila in self.matriz:
             for casilla in fila:
                 casilla.dibujar(pantalla, offset_x, offset_y)
+
 class Juego:
     def __init__(self):
         # crea la ventana del juego y configuraciones iniciales
@@ -585,16 +614,31 @@ class Juego:
         self.enemigos_escapados = 0
         self.offset_x = 50         # posiciona el mapa dentro de la ventana
         self.offset_y = 50
+        
+        # --- Nueva variable para control de música urgente ---
+        self.musica_urgente_activa = False 
 
         # carga imágenes y sonidos, si fallan el juego sigue funcionando
         try:
-            self.logo = pygame.image.load("oneway.png")
+            self.logo = pygame.image.load("owlogo.png")
             self.logo_grande = pygame.transform.scale(self.logo, (400, 230))
             self.sonido_click = pygame.mixer.Sound("pop.wav")
             self.sonido_click.set_volume(0.6)
         except:
             self.logo_grande = None
             self.sonido_click = None
+
+        # --- Modificación para cargar nombres de archivos de música ---
+        self.sonido_menu = "onewaymenu.wav"
+        self.sonido_escapa_normal = "oneWay.wav"
+        self.sonido_escapa_urgente = "notime.wav"
+        self.sonido_cazador_normal = "onthehunt.wav"
+        self.sonido_cazador_urgente = "notimeforhunting.wav"
+        # -------------------------------------------------------------
+
+        # Inicializa la música del menú al inicio
+        self.reproducir_musica(self.sonido_menu)
+
 
         # botones del menú principal
         self.boton_jugar = Boton(
@@ -654,6 +698,80 @@ class Juego:
             "#5665D6",
         )
 
+    def reproducir_musica(self, archivo, loop=True):
+        # Intenta cargar y reproducir el archivo de música
+        try:
+            pygame.mixer.music.set_volume(0.6)
+            pygame.mixer.music.load(archivo)
+            pygame.mixer.music.play(-1 if loop else 0)
+            self.musica_urgente_activa = False # Se resetea al poner una nueva canción
+        except pygame.error as e:
+            # Imprime error si no se encuentra el archivo
+            print(f"Error al cargar la música '{archivo}': {e}")
+            pass
+
+    def cambiar_a_musica_urgente(self, archivo):
+        # Solo reproduce la música de emergencia si no está ya activa
+        if not self.musica_urgente_activa:
+            try:
+                # Detiene la música actual de forma segura antes de cargar la urgente
+                if pygame.mixer.music.get_busy():
+                    pygame.mixer.music.stop()
+                    
+                pygame.mixer.music.load(archivo)
+                pygame.mixer.music.play(-1)
+                self.musica_urgente_activa = True
+            except:
+                pass
+
+    def cambiar_estado(self, nuevo_estado):
+        # Define si se debe detener la música al cambiar de estado
+        detener_musica = True
+        
+        # Guarda el estado actual (antes de cambiar) para la lógica de música
+        estado_previo = self.estado 
+
+        #Excepciones: Continuidad de la Música de Menú
+        
+        # No detener si se pasa del menú a selección de modo
+        if estado_previo == "menu" and nuevo_estado == "seleccion_modo":
+            detener_musica = False
+        # No detener si se pasa de selección de modo a registro
+        elif estado_previo == "seleccion_modo" and nuevo_estado == "registro":
+            detener_musica = False
+        # No detener si se pasa de registro o selección de modo a menú 
+        elif nuevo_estado == "menu" and estado_previo in ["seleccion_modo", "registro", "puntajes"]:
+            detener_musica = False
+        # No detener si se va de la pantalla de registro/seleccion/menu al menú de puntajes
+        elif nuevo_estado == "puntajes" and estado_previo in ["menu", "seleccion_modo", "registro"]:
+            detener_musica = False
+        
+        # --- Detener la música si se requiere (principalmente al entrar a modo de juego) ---
+        if detener_musica and pygame.mixer.music.get_busy():
+            pygame.mixer.music.stop()
+            self.musica_urgente_activa = False
+
+        self.estado = nuevo_estado
+    
+        # --- Lógica para INICIAR la Música según estado (se supone que cambia si hay poco tiempo)---
+
+        if nuevo_estado == "menu":
+            # Solo reproduce si la música fue detenida (viene de un modo de juego) 
+            # o si no está sonando nada. Si vino de puntajes/seleccion_modo, no la reinicia.
+            if detener_musica or not pygame.mixer.music.get_busy():
+                self.reproducir_musica(self.sonido_menu)
+    
+        elif nuevo_estado == "modo1":  # Modo ESCAPA
+            self.reproducir_musica(self.sonido_escapa_normal)
+    
+        elif nuevo_estado == "modo2":  # Modo CAZADOR
+            self.reproducir_musica(self.sonido_cazador_normal)
+
+        elif nuevo_estado == "puntajes":
+            # Si viene de un modo de juego, la música fue detenida y debe iniciar la del menú.
+            if estado_previo in ["modo1", "modo2"]:
+                self.reproducir_musica(self.sonido_menu)
+
     def reiniciar_juego(self):
         # reinicia todo para comenzar una nueva partida
         self.mapa = Mapa(ancho_mapa, alto_mapa)
@@ -665,6 +783,7 @@ class Juego:
         self.tiempo_limite = 60
         self.puntos = 0
         self.enemigos_escapados = 0
+        self.musica_urgente_activa = False # Se resetea al iniciar
 
         # crea enemigos dependiendo del modo de juego
         num_enemigos = 3 if self.modo_juego == 1 else 2
@@ -745,7 +864,6 @@ class Juego:
     def dibujar_menu(self):
         """pinta la pantalla del menú principal"""
         self.pantalla.fill(fondo_menu)
-
         # si el logo está disponible lo muestra, si no usa texto
         if self.logo_grande:
             logo_rect = self.logo_grande.get_rect(
@@ -759,7 +877,374 @@ class Juego:
         self.boton_jugar.draw(self.pantalla, fuente_boton)
         self.boton_puntajes.draw(self.pantalla, fuente_boton)
         self.boton_salir.draw(self.pantalla, fuente_boton)
-# perdón, se me había olvidado subirlo. Por si acaso, faltan algunas cosillas que estoy terminando :))
+
+    def dibujar_seleccion_modo(self):
+        # muestra la pantalla donde se elige el modo de juego
+        self.pantalla.fill(fondo_menu)
+        self.dibujar_texto(
+            "SELECCIONA MODO DE JUEGO", 230, 150, fuente1, blanco
+        )
+        self.boton_escapa.draw(self.pantalla, fuente_boton)
+        self.boton_cazador.draw(self.pantalla, fuente_boton)
+        self.boton_volver.draw(self.pantalla, fuente_boton)
+
+    def dibujar_registro(self):
+        # pantalla donde el jugador escribe su nombre
+        self.pantalla.fill(fondo_menu)
+        self.dibujar_texto("Ingresa tu nombre:", 280, 250, fuente1, blanco)
+
+        # cuadro donde se escribe el nombre
+        caja_texto = pygame.Rect(300, 320, 400, 60)
+        pygame.draw.rect(self.pantalla, blanco, caja_texto, border_radius=10)
+        pygame.draw.rect(self.pantalla, "#3FD98E", caja_texto, 3, border_radius=10)
+
+        self.dibujar_texto(self.nombre_jugador, 320, 335, fuente_input, negro)
+
+        self.dibujar_texto(
+            "Presiona ENTER para continuar", 250, 450, fuente_pequeña, blanco
+        )
+        self.dibujar_texto("ESC para volver", 380, 490, fuente_pequeña, blanco)
+
+    def dibujar_juego(self):
+        self.pantalla.fill(negro)
+
+        # dibuja el mapa completo con su desplazamiento
+        self.mapa.dibujar(self.pantalla, self.offset_x, self.offset_y)
+
+        # dibuja las trampas activas
+        for trampa in self.trampas:
+            trampa.dibujar(self.pantalla, self.offset_x, self.offset_y)
+
+        # dibuja todos los enemigos actuales
+        for enemigo in self.enemigos:
+            enemigo.dibujar(self.pantalla, self.offset_x, self.offset_y)
+
+        # dibuja al jugador
+        self.jugador.dibujar(self.pantalla, self.offset_x, self.offset_y)
+
+        # calcula el tiempo que queda antes de que acabe la partida
+        tiempo_transcurrido = int(time.time() - self.tiempo_inicio)
+        tiempo_restante = self.tiempo_limite - tiempo_transcurrido
+        if tiempo_restante < 0:
+            tiempo_restante = 0
+        self.dibujar_texto(f"Tiempo: {tiempo_restante}s", 800, 20, fuente_pequeña, blanco)
+
+        # --- Lógica de música urgente (FIXED) ---
+        # 1. MÚSICA URGENTE TEMPRANA (31 segundos transcurridos)
+        # Si han pasado entre 31 y 50 segundos, activa la música urgente.
+        if 31 <= tiempo_transcurrido <= 50:
+            if not self.musica_urgente_activa:
+                if self.modo_juego == 1:
+                    self.cambiar_a_musica_urgente(self.sonido_escapa_urgente)
+                elif self.modo_juego == 2:
+                    self.cambiar_a_musica_urgente(self.sonido_cazador_urgente)
+        
+        # 2. MÚSICA URGENTE FINAL (10 segundos restantes)
+        # Si quedan 10 segundos o menos, asegura que la música urgente esté activa.
+        elif tiempo_restante <= 10:
+            if not self.musica_urgente_activa:
+                if self.modo_juego == 1:
+                    self.cambiar_a_musica_urgente(self.sonido_escapa_urgente)
+                elif self.modo_juego == 2:
+                    self.cambiar_a_musica_urgente(self.sonido_cazador_urgente)
+        
+        # 3. REGRESO A MÚSICA NORMAL 
+        # Si la música urgente está activa, pero el tiempo ha vuelto a una zona "segura", cambia a normal.
+        else:
+            if self.musica_urgente_activa:
+                if self.modo_juego == 1:
+                    self.reproducir_musica(self.sonido_escapa_normal)
+                elif self.modo_juego == 2:
+                    self.reproducir_musica(self.sonido_cazador_normal)
+        # -------------------------------
+
+        # muestra los puntos actuales
+        self.dibujar_texto(f"Puntos: {self.puntos}", 800, 50, fuente_pequeña, blanco)
+
+        # barra de energía del jugador
+        pygame.draw.rect(self.pantalla, rojo, (50, 620, 200, 20))
+        pygame.draw.rect(
+            self.pantalla,
+            verde_jugador,
+            (50, 620, int(200 * self.jugador.energia / 100), 20),
+        )
+        self.dibujar_texto("Energia", 50, 650, fuente_pequeña, blanco)
+
+        # información adicional según el modo
+        if self.modo_juego == 1:
+            # en modo escapa, se muestran trampas restantes
+            self.dibujar_texto(
+                f"Trampas: {self.max_trampas - len(self.trampas)}/3",
+                800,
+                80,
+                fuente_pequeña,
+                blanco,
+            )
+        else:
+            # en modo cazador, se muestra cuántos enemigos lograron huir
+            self.dibujar_texto(
+                f"Escapados: {self.enemigos_escapados}",
+                800,
+                80,
+                fuente_pequeña,
+                blanco,
+            )
+
+        # controles del juego mostrados en pantalla
+        self.dibujar_texto(
+            "WASD/Flechas: Mover | Shift: Correr",
+            260,
+            670,
+            fuente_pequeña,
+            blanco,
+        )
+        if self.modo_juego == 1:
+            self.dibujar_texto("Espacio: Trampa", 420, 650, fuente_pequeña, blanco)
 
 
+    def dibujar_puntajes(self):
+        self.pantalla.fill(fondo_menu)
 
+        # pantalla principal del top de puntajes
+        self.dibujar_texto("TOP 5 PUNTAJES", 320, 50, fuente1, blanco)
+
+        # puntajes modo escapa
+        self.dibujar_texto("Modo Escapa:", 150, 150, fuente_pequeña, "#3FD98E")
+        for i, entrada in enumerate(self.puntajes["modo1"]):
+            texto = f"{i+1}. {entrada['nombre']}: {entrada['puntos']} pts"
+            self.dibujar_texto(texto, 150, 180 + i * 30, fuente_pequeña, blanco)
+
+        # puntajes modo cazador
+        self.dibujar_texto("Modo Cazador:", 550, 150, fuente_pequeña, "#FF5E6C")
+        for i, entrada in enumerate(self.puntajes["modo2"]):
+            texto = f"{i+1}. {entrada['nombre']}: {entrada['puntos']} pts"
+            self.dibujar_texto(texto, 550, 180 + i * 30, fuente_pequeña, blanco)
+
+        # mensaje para volver al menú
+        self.dibujar_texto("Presiona ESC para volver", 320, 550, fuente_pequeña, blanco)
+
+
+    def actualizar_juego(self):
+        tiempo_actual = time.time()
+
+        # actualiza el comportamiento de todos los enemigos uno por uno
+        for enemigo in self.enemigos[:]:
+
+            # si el enemigo está muerto, revisa si ya debe revivir
+            if enemigo.muerto:
+                if enemigo.actualizar(tiempo_actual):
+                    # si revive, se genera uno nuevo y este se elimina
+                    self.generar_enemigo()
+                    self.enemigos.remove(enemigo)
+
+            else:
+                # movimiento según el modo
+                if self.modo_juego == 1:
+                    # modo escapa: el enemigo persigue al jugador
+                    enemigo.mover_hacia(
+                        self.jugador.x, self.jugador.y, self.mapa.matriz, True, self.modo_juego
+                    )
+                else:
+                    # modo cazador: huye del jugador y busca la salida
+                    enemigo.mover_hacia(
+                        self.jugador.x, self.jugador.y, self.mapa.matriz, False, self.modo_juego
+                    )
+
+                # distancia para verificar colisión entre jugador y enemigo
+                distancia = (
+                    (enemigo.x - self.jugador.x) ** 2
+                    + (enemigo.y - self.jugador.y) ** 2
+                ) ** 0.5
+
+                # si hay colisión
+                if distancia < 0.7:
+                    if self.modo_juego == 1:
+                        # modo escapa: perder
+                        tiempo_total = int(time.time() - self.tiempo_inicio)
+                        # puntaje depende del tiempo que tardó el enemigo en atraparte
+                        self.puntos += max(0, 10000 - tiempo_total * 10)
+                        self.agregar_puntaje(1, self.puntos)
+                        self.cambiar_estado("puntajes") # Usa la nueva función
+                        return
+                    else:
+                        # modo cazador: jugador atrapa enemigo
+                        self.puntos += 100
+                        self.enemigos.remove(enemigo)
+                        self.generar_enemigo()
+                        continue
+
+                # si estamos en modo cazador, revisamos si el enemigo llegó a la salida
+                if self.modo_juego == 2:
+                    if self.mapa.matriz[int(enemigo.y)][int(enemigo.x)].tipo == salida:
+                        self.puntos = max(0, self.puntos - 50) #retorna el maximo, entonces nunca va a ser menor que 0, yupi!!
+                        self.enemigos_escapados += 1
+                        self.enemigos.remove(enemigo)
+                        self.generar_enemigo()
+
+                # revisa si el enemigo cayó en una trampa
+                for trampa in self.trampas[:]:
+                    if abs(enemigo.x - trampa.x) < 0.7 and abs(enemigo.y - trampa.y) < 0.7:
+                        enemigo.muerto = True
+                        enemigo.tiempo_muerte = tiempo_actual
+                        self.trampas.remove(trampa)
+                        self.puntos += 50
+
+        # verificar si el jugador llegó a la salida en modo escapa
+        if self.modo_juego == 1:
+            if self.mapa.matriz[int(self.jugador.y)][int(self.jugador.x)].tipo == salida:
+                # se calcula el puntaje final según tiempo y enemigos restantes
+                tiempo_total = int(time.time() - self.tiempo_inicio)
+                self.puntos += max(0, 10000 - tiempo_total * 10 + len(self.enemigos) * 500)
+                self.agregar_puntaje(1, self.puntos)
+                self.cambiar_estado("puntajes") # Usa la nueva función
+                return
+
+        # manejo del tiempo límite del nivel
+        tiempo_restante = self.tiempo_limite - int(time.time() - self.tiempo_inicio)
+        if tiempo_restante <= 0:
+            # se guarda puntaje según modo y se termina la partida
+            if self.modo_juego == 1:
+                self.agregar_puntaje(1, self.puntos)
+            else:
+                self.agregar_puntaje(2, self.puntos)
+            self.cambiar_estado("puntajes") # Usa la nueva función
+            return
+        
+    def ejecutar(self):
+        ejecutando = True
+        while ejecutando:
+            for evento in pygame.event.get():
+                if evento.type == pygame.QUIT:
+                    ejecutando = False
+
+                # manejo del menú principal: botones de jugar, puntajes y salir
+                if self.estado == "menu":
+                    if self.boton_jugar.clicked(evento):
+                        if self.sonido_click:
+                            self.sonido_click.play()
+                        # Pasa a escoger el modo de juego (la música del menú continúa)
+                        self.cambiar_estado("seleccion_modo")
+                    elif self.boton_puntajes.clicked(evento):
+                        if self.sonido_click:
+                            self.sonido_click.play()
+                        # La música del menú continúa por la nueva excepción en cambiar_estado
+                        self.cambiar_estado("puntajes")
+                    elif self.boton_salir.clicked(evento):
+                        if self.sonido_click:
+                            self.sonido_click.play()
+                        ejecutando = False
+                
+                # menú donde se escoge entre modo escapa o modo cazador
+                elif self.estado == "seleccion_modo":
+                    if self.boton_escapa.clicked(evento):
+                        if self.sonido_click:
+                            self.sonido_click.play()
+                        self.modo_juego = 1
+                        # Pasa a pantalla para escribir nombre (la música del menú continúa)
+                        self.cambiar_estado("registro")
+                    elif self.boton_cazador.clicked(evento):
+                        if self.sonido_click:
+                            self.sonido_click.play()
+                        self.modo_juego = 2
+                        self.cambiar_estado("registro")
+                    elif self.boton_volver.clicked(evento):
+                        if self.sonido_click:
+                            self.sonido_click.play()
+                        self.cambiar_estado("menu")
+
+                # manejo del teclado
+                if evento.type == pygame.KEYDOWN:
+                    # pantalla para ingresar nombre
+                    if self.estado == "registro":
+                        # enter: empieza la partida si ya escribió nombre
+                        if evento.key == pygame.K_RETURN and len(self.nombre_jugador) > 0:
+                            self.reiniciar_juego()
+                            # Aquí sí se detiene la música del menú y se inicia la del juego
+                            self.cambiar_estado(f"modo{self.modo_juego}")
+
+                        # borrar último carácter
+                        elif evento.key == pygame.K_BACKSPACE:
+                            self.nombre_jugador = self.nombre_jugador[:-1]
+
+                        # volver atrás
+                        elif evento.key == pygame.K_ESCAPE:
+                            self.cambiar_estado("seleccion_modo")
+                            self.nombre_jugador = ""
+
+                        # escribir caracteres válidos (máx 15)
+                        elif len(self.nombre_jugador) < 15 and evento.unicode.isprintable():
+                            self.nombre_jugador += evento.unicode
+
+                    # desde la pantalla de puntajes puede volver al menú
+                    elif self.estado == "puntajes":
+                        if evento.key == pygame.K_ESCAPE:
+                            self.cambiar_estado("menu")
+
+            # si el juego está activo (modo 1 o modo 2)
+            if self.estado in ["modo1", "modo2"]:
+                keys = pygame.key.get_pressed()
+
+                # correr si mantiene shift y tiene energía
+                if keys[pygame.K_LSHIFT] and self.jugador.energia > 0:
+                    self.jugador.corriendo = True
+                    velocidad = self.jugador.velocidad_correr
+                else:
+                    self.jugador.corriendo = False
+                    velocidad = self.jugador.velocidad_normal
+
+                # guarda la posición por si necesita revertirla
+                pos_anterior_x = self.jugador.x
+                pos_anterior_y = self.jugador.y
+
+                # movimiento básico del jugador.
+                if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                    self.jugador.mover(-velocidad, 0, self.mapa.matriz, self.modo_juego)
+                if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                    self.jugador.mover(velocidad, 0, self.mapa.matriz, self.modo_juego)
+                if keys[pygame.K_UP] or keys[pygame.K_w]:
+                    self.jugador.mover(0, -velocidad, self.mapa.matriz, self.modo_juego)
+                if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                    self.jugador.mover(0, velocidad, self.mapa.matriz, self.modo_juego)
+
+                # en modo cazador no puede retroceder dentro de la salida
+                if self.modo_juego == 2:
+                    if self.mapa.matriz[int(self.jugador.y)][int(self.jugador.x)].tipo == salida:
+                        self.jugador.x = pos_anterior_x
+                        self.jugador.y = pos_anterior_y
+
+                # baja energía si corre
+                self.jugador.actualizar_energia()
+
+                # colocar trampa (solo modo 1)
+                if keys[pygame.K_SPACE] and self.modo_juego == 1:
+                    tiempo_actual = time.time()
+                    # limita trampas y tiene un tiempo de espera entre trampas
+                    if len(self.trampas) < self.max_trampas and tiempo_actual - self.trampa_cooldown >= 5:
+                        self.trampas.append(Trampa(int(self.jugador.x), int(self.jugador.y)))
+                        self.trampa_cooldown = tiempo_actual
+
+                # actualiza enemigos, puntos y lógica del juego
+                self.actualizar_juego()
+
+            # dibujo de pantallas según el estado actual
+            if self.estado == "menu":
+                self.dibujar_menu()
+            elif self.estado == "seleccion_modo":
+                self.dibujar_seleccion_modo()
+            elif self.estado == "registro":
+                self.dibujar_registro()
+            elif self.estado in ["modo1", "modo2"]:
+                self.dibujar_juego()
+            elif self.estado == "puntajes":
+                self.dibujar_puntajes()
+                
+
+            # refresca pantalla
+            pygame.display.flip()
+            self.reloj.tick(fps)
+
+        pygame.quit()
+
+if __name__ == "__main__":
+    juego = Juego()
+    juego.ejecutar()
