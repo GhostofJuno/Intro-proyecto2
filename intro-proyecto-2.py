@@ -1048,7 +1048,7 @@ class Juego:
             )
             self.pantalla.blit(self.logo_grande, logo_rect)
         else:
-            self.dibujar_texto("JUEGO ESCAPA/CAZADOR", 200, 150, fuente1, blanco)
+            self.dibujar_texto("ONEWAY", 420, 150, fuente1, blanco)
 
         # dibuja los botones principales
         self.boton_jugar.draw(self.pantalla, fuente_boton)
@@ -1490,4 +1490,5 @@ class Juego:
 
 if __name__ == "__main__":
     juego = Juego()
+
     juego.ejecutar()
